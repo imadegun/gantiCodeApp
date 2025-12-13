@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  clientcode-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clientcode-management
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - MYSQL_HOST=gayafusion-db
+      - MYSQL_USER=GayaIT
+      - MYSQL_PASSWORD=GF-Sys@80571
+      - MYSQL_DATABASE=gayafusionall
+      - NEXT_PUBLIC_IMAGE_SERVER_URL=http://10.16.5.6/upload
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  clientcode-data:

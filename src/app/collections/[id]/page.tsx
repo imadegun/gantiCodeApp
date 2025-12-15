@@ -161,7 +161,7 @@ export default function ProductDetailPage() {
       try {
         const response = await fetch(`/api/products/${productId}`);
         const result = await response.json();
-        
+
         if (result.success) {
           setProduct(result.data.product);
           setRelatedItems(result.data.relatedItems || []);
@@ -215,16 +215,16 @@ export default function ProductDetailPage() {
     notes
   }: {
     title: string;
-    items: Array<{code?: string; description?: string; photo?: string | null}>;
+    items: Array<{ code?: string; description?: string; photo?: string | null }>;
     notes?: string | null;
   }) => {
     // Check if any items have data
     const hasData = items.some(item => item.code);
-    
+
     if (!hasData) {
       return null; // Return null if no data to display
     }
-    
+
     return (
       <div className="space-y-4">
         <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{title}</h4>
@@ -233,10 +233,8 @@ export default function ProductDetailPage() {
             <div key={index} className="space-y-2">
               {item.code ? (
                 <>
-                  <div className="border rounded p-3 bg-muted/50">
-                    <div className="text-sm font-medium">
-                      {item.code}
-                    </div>
+                  <div className="text-sm font-medium">
+                    {item.code}
                   </div>
                   {item.photo && (
                     <div className="border rounded overflow-hidden bg-muted">
@@ -256,17 +254,15 @@ export default function ProductDetailPage() {
                   )}
                 </>
               ) : (
-                <div className="border border-dashed rounded p-3 bg-muted/20">
-                  <div className="text-sm text-muted-foreground">
-                    Empty
-                  </div>
+                <div className="text-sm text-muted-foreground">
+                  -
                 </div>
               )}
             </div>
           ))}
         </div>
         {notes && (
-          <div className="mt-4 p-3 bg-muted/30 rounded">
+          <div className="mt-4">
             <div className="text-sm whitespace-pre-wrap">{notes}</div>
           </div>
         )}
@@ -287,7 +283,7 @@ export default function ProductDetailPage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Collections
           </Button>
-          
+
           <div className="flex items-center gap-4 mb-4">
             <h1 className="text-3xl font-bold text-foreground">
               {product.CategoryName}
@@ -310,7 +306,7 @@ export default function ProductDetailPage() {
             <Card>
               <CardContent className="p-6">
                 <h3 className="text-lg font-semibold mb-4">Product Images</h3>
-                
+
                 {/* Main Technical Drawing - Mandatory Display */}
                 <div className="mb-4">
                   <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1 px-2 pt-2">Technical Drawing</div>
@@ -336,7 +332,7 @@ export default function ProductDetailPage() {
                     </div>
                   )}
                 </div>
-                
+
                 {/* Product Photos - Mandatory Thumbnails */}
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Product Photos</h4>
@@ -381,12 +377,12 @@ export default function ProductDetailPage() {
                 <Tabs defaultValue="basic" className="w-full">
                   <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="basic">Basic</TabsTrigger>
-                    <TabsTrigger value="build">Build Tech</TabsTrigger>
-                    <TabsTrigger value="materials">Materials</TabsTrigger>
+                    <TabsTrigger value="build">Build</TabsTrigger>
+                    <TabsTrigger value="materials">Mat. & Tools</TabsTrigger>
                     <TabsTrigger value="glaze">Glaze & Firing</TabsTrigger>
-                    <TabsTrigger value="others">Others</TabsTrigger>
+                    <TabsTrigger value="others">Misc.</TabsTrigger>
                   </TabsList>
-                  
+
                   <TabsContent value="basic" className="space-y-6 mt-6">
                     <div className="space-y-4">
                       <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Basic Information</h4>
@@ -418,7 +414,7 @@ export default function ProductDetailPage() {
                       </div>
                     </div>
                   </TabsContent>
-                  
+
                   <TabsContent value="build" className="space-y-6 mt-6">
                     <div className="space-y-4">
                       <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Build Technology</h4>
@@ -454,7 +450,7 @@ export default function ProductDetailPage() {
                       )}
                     </div>
                   </TabsContent>
-                  
+
                   <TabsContent value="materials" className="space-y-6 mt-6">
                     <div className="space-y-6">
                       {/* Texture Section */}
@@ -468,7 +464,7 @@ export default function ProductDetailPage() {
                         ]}
                         notes={product.TextureNote}
                       />
-                      
+
                       {/* Engobe Section */}
                       <MaterialSection
                         title="Engobe"
@@ -480,7 +476,7 @@ export default function ProductDetailPage() {
                         ]}
                         notes={product.EngobeNote}
                       />
-                      
+
                       {/* Estruder Section */}
                       <MaterialSection
                         title="Estruder"
@@ -492,7 +488,7 @@ export default function ProductDetailPage() {
                         ]}
                         notes={product.EstruderNote}
                       />
-                      
+
                       {/* Tools Section */}
                       <MaterialSection
                         title="Tools"
@@ -506,69 +502,109 @@ export default function ProductDetailPage() {
                       />
                     </div>
                   </TabsContent>
-                  
+
                   <TabsContent value="glaze" className="space-y-6 mt-6">
                     <div className="space-y-6">
+                      {/* 1. CodeGlaze Section */}
                       <div className="space-y-4">
-                        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Glaze Information</h4>
+                        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Glaze</h4>
                         <div className="grid grid-cols-4 gap-4">
                           {[
-                            { code: product.Glaze1Code, description: product.Glaze1Description, density: product.GlazeDensity1, temp: product.GlazeTemp },
-                            { code: product.Glaze2Code, description: product.Glaze2Description, density: product.GlazeDensity2, temp: null },
-                            { code: product.Glaze3Code, description: product.Glaze3Description, density: product.GlazeDensity3, temp: null },
-                            { code: product.Glaze4Code, description: product.Glaze4Description, density: product.GlazeDensity4, temp: null }
+                            { code: product.Glaze1Code },
+                            { code: product.Glaze2Code },
+                            { code: product.Glaze3Code },
+                            { code: product.Glaze4Code }
                           ].map((glaze, index) => (
-                            <div key={index} className="space-y-2">
-                              <div className="border rounded p-3 bg-muted/50">
-                                <div className="text-sm font-medium">
-                                  {glaze.code || '-'} {glaze.description ? `- ${glaze.description}` : ''}
-                                </div>
-                              </div>
-                              {glaze.density && (
-                                <div>
-                                  <label className="text-xs font-medium">Density</label>
-                                  <p className="text-sm">{glaze.density}</p>
-                                </div>
-                              )}
-                              {glaze.temp && (
-                                <div>
-                                  <label className="text-xs font-medium">Temperature</label>
-                                  <p className="text-sm">{glaze.temp}°C</p>
-                                </div>
-                              )}
+                            <div key={index} className="text-sm font-medium">
+                              {glaze.code || '-'}
                             </div>
                           ))}
                         </div>
-                        {product.GlazeNotes && (
-                          <div className="mt-4">
-                            <label className="text-sm font-medium">Glaze Notes</label>
-                            <div className="mt-1 p-3 bg-muted/30 rounded">
-                              <div className="text-sm whitespace-pre-wrap">{product.GlazeNotes}</div>
+                         <div className="grid grid-cols-4 gap-4">
+                          {[
+                            { description: product.Glaze1Description },
+                            { description: product.Glaze2Description },
+                            { description: product.Glaze3Description },
+                            { description: product.Glaze4Description }
+                          ].map((glaze, index) => (
+                            <div key={index} className="text-sm">
+                              {glaze.description || '-'}
                             </div>
-                          </div>
-                        )}
+                          ))}
+                        </div>
                       </div>
-                      
+
+                      {/* 2. GlazeDescription Section
                       <div className="space-y-4">
-                        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Firing Information</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-sm font-medium">Firing</label>
-                            <p className="text-base">{product.Firing || '-'}</p>
+                        { <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">GlazeDescription</h4> */}
+                        {/* <div className="grid grid-cols-4 gap-4">
+                          {[
+                            { description: product.Glaze1Description },
+                            { description: product.Glaze2Description },
+                            { description: product.Glaze3Description },
+                            { description: product.Glaze4Description }
+                          ].map((glaze, index) => (
+                            <div key={index} className="text-sm">
+                              {glaze.description || '-'}
+                            </div>
+                          ))}</div>
+                      </div>  */}
+
+                      {/* 3. Density Section */}
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Density</h4>
+                        <div className="grid grid-cols-4 gap-4">
+                          {[
+                            { density: product.GlazeDensity1 },
+                            { density: product.GlazeDensity2 },
+                            { density: product.GlazeDensity3 },
+                            { density: product.GlazeDensity4 }
+                          ].map((glaze, index) => (
+                            <div key={index} className="text-sm">
+                              {glaze.density || '-'}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 4. Firing Section */}
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Firing</h4>
+                        <div className="text-base">
+                          {product.Firing || '-'}
+                        </div>
+                      </div>
+
+                      {/* 5. Temp Section */}
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Temp</h4>
+                        <div className="text-base">
+                          {product.GlazeTemp ? `${product.GlazeTemp}°C` : '-'}
+                        </div>
+                      </div>
+
+                      {/* 6. Firing Note Section */}
+                      {product.FiringNote && (
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Firing Note</h4>
+                          <div className="text-sm whitespace-pre-wrap">
+                            {product.FiringNote}
                           </div>
                         </div>
-                        {product.FiringNote && (
-                          <div className="mt-4">
-                            <label className="text-sm font-medium">Firing Notes</label>
-                            <div className="mt-1 p-3 bg-muted/30 rounded">
-                              <div className="text-sm whitespace-pre-wrap">{product.FiringNote}</div>
-                            </div>
+                      )}
+
+                      {/* Glaze Notes */}
+                      {product.GlazeNotes && (
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Glaze Notes</h4>
+                          <div className="text-sm whitespace-pre-wrap">
+                            {product.GlazeNotes}
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
-                  
+
                   <TabsContent value="others" className="space-y-6 mt-6">
                     <div className="space-y-6">
                       <div className="space-y-4">
@@ -600,7 +636,7 @@ export default function ProductDetailPage() {
                           </div>
                         )}
                       </div>
-                      
+
                       <div className="space-y-4">
                         <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">History</h4>
                         {product.History ? (
@@ -632,7 +668,7 @@ export default function ProductDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {relatedItems.map((item) => (
                   <Card key={item.ID} className="cursor-pointer hover:shadow-md transition-shadow"
-                        onClick={() => router.push(`/collections/${item.ID}`)}>
+                    onClick={() => router.push(`/collections/${item.ID}`)}>
                     <CardContent className="p-4">
                       <div className="aspect-square mb-3">
                         {item.Photo1 ? (

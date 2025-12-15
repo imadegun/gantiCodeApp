@@ -70,21 +70,98 @@ enum StockStatus {
   out_of_stock
 }
 
-// Legacy models (keeping for compatibility)
+// User Authentication System
 model User {
   id        String   @id @default(cuid())
+  username  String   @unique
   email     String   @unique
+  password  String
   name      String?
+  role      UserRole @default(USER)
+  isActive  Boolean  @default(true)
+  lastLogin DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relations
+  stockEntries    StockEntry[]
+  stockOffers     StockOffer[]
+  @@map("users")
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// Enhanced Stock Management
+model StockEntry {
+  id                    String       @id @default(cuid())
+  clientCode            String
+  designCode            String
+  productId             Int          // References MySQL tblcollect_master.ID
+  department            String?
+  region                String?
+  quantityIn            Int
+  isStockInSetComplete  Boolean      @default(false)
+  isLid                 Boolean      @default(false)
+  isBody                Boolean      @default(false)
+  status                StockStatus  @default(available)
+  notes                 String?
+  expirationYears       Int          @default(2) // 2, 5, or 10 years
+  expirationDate        DateTime?    // Calculated based on expirationYears
+  createdBy             String
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  // Relations
+  creator               User         @relation(fields: [createdBy], references: [id])
+  offers                StockOffer[]
+
+  @@map("stock_entries")
+}
+
+model StockOffer {
+  id          String        @id @default(cuid())
+  stockEntryId String
+  clientId    String        // Client being offered to
+  quantity    Int
+  status      OfferStatus   @default(pending)
+  offerDate   DateTime      @default(now())
+  expiryDate  DateTime      // When offer expires
+  notes       String?
+  createdBy   String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  stockEntry  StockEntry    @relation(fields: [stockEntryId], references: [id])
+  creator     User          @relation(fields: [createdBy], references: [id])
+
+  @@map("stock_offers")
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  clientCode  String   @unique
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("clients")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  STOCK_MANAGER
+  PRODUCT_CODE_MANAGER
+  USER
+}
+
+enum OfferStatus {
+  pending
+  approved
+  rejected
+  expired
+  cancelled
 }

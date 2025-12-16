@@ -117,7 +117,7 @@ export default function EnhancedStockManagement() {
     category: '',
     department: '',
     region: '',
-    status: '',
+    status: 'all',
     search: ''
   });
   
@@ -156,7 +156,7 @@ export default function EnhancedStockManagement() {
     try {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
+        if (value && value !== 'all') params.append(key, value);
       });
       params.append('page', pagination.page.toString());
       params.append('limit', pagination.limit.toString());
@@ -443,7 +443,7 @@ export default function EnhancedStockManagement() {
                       <SelectValue placeholder="All Status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Status</SelectItem>
+                      <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="available">Available</SelectItem>
                       <SelectItem value="low_stock">Low Stock</SelectItem>
                       <SelectItem value="out_of_stock">Out of Stock</SelectItem>

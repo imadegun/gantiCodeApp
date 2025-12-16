@@ -717,10 +717,7 @@ export default function Home() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <button
-                          onClick={() => openProductDetail(item.ID)}
-                          className="text-blue-600 hover:text-blue-800 underline font-medium"
-                          title="Click to view product details"
+                        <button                     
                         >
                           {item.DesignName}
                         </button>

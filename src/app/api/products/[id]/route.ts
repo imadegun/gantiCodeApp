@@ -49,7 +49,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         tls2.ToolsCode as Tools2Code, tls2.ToolsDescription as Tools2Description, tls2.ToolsPhoto1 as Tools2Photo,
         tls3.ToolsCode as Tools3Code, tls3.ToolsDescription as Tools3Description, tls3.ToolsPhoto1 as Tools3Photo,
         tls4.ToolsCode as Tools4Code, tls4.ToolsDescription as Tools4Description, tls4.ToolsPhoto1 as Tools4Photo,
-        tbu.UnitValue
+        tbu.UnitValue,
+        lst.LustreCode as LusterCode, lst.LustreDescription as LusterDescription,
+        -- Additional luster information
+        lst2.LustreCode as Luster2Code, lst2.LustreDescription as Luster2Description,
+        lst3.LustreCode as Luster3Code, lst3.LustreDescription as Luster3Description,
+        lst4.LustreCode as Luster4Code, lst4.LustreDescription as Luster4Description,
+        tm.LustreNote,
+        tm.LustreTemp,
+        tm.LustreTempNote
       FROM tblcollect_master tm
       LEFT JOIN tblcollect_design td ON tm.DesignCode = td.DesignCode
       LEFT JOIN tblcollect_category tc ON tm.CategoryCode = tc.CategoryCode
@@ -83,6 +91,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       LEFT JOIN tbltools tls2 ON tm.Tools2 = tls2.ID
       LEFT JOIN tbltools tls3 ON tm.Tools3 = tls3.ID
       LEFT JOIN tbltools tls4 ON tm.Tools4 = tls4.ID
+      -- Luster joins
+      LEFT JOIN tbllustre lst ON tm.Lustre1 = lst.ID
+      LEFT JOIN tbllustre lst2 ON tm.Lustre2 = lst2.ID
+      LEFT JOIN tbllustre lst3 ON tm.Lustre3 = lst3.ID
+      LEFT JOIN tbllustre lst4 ON tm.Lustre4 = lst4.ID
       LEFT JOIN tblunit tbu ON tm.unit = tbu.UnitID
       WHERE tm.ID = ?
     `;

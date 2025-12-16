@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Image as ImageIcon, Package, Tag } from 'lucide-react';
+import { ArrowLeft, Image as ImageIcon, Package, Tag, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProductDetail {
@@ -36,9 +36,21 @@ interface ProductDetail {
   Rim?: string;
   Feet?: string;
   GlazeTemp?: number;
-  GlazeTempNote?: string;
+  GlazeTempNote?: string; 
+  LusterDescription?: string;
+  LusterCode?: string;
+  // Additional luster fields
+  Luster2Code?: string;
+  Luster2Description?: string;
+  Luster3Code?: string;
+  Luster3Description?: string;
+  Luster4Code?: string;
+  Luster4Description?: string;
   Firing?: string;
   FiringNote?: string;
+  LustreNote?: string;
+  LustreTemp?: number;
+  LustreTempNote?: string;
   History?: string;
   TextureName?: string;
   MaterialName?: string;
@@ -142,11 +154,14 @@ export default function ProductDetailPage() {
   const [relatedItems, setRelatedItems] = useState<RelatedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [modalImageUrl, setModalImageUrl] = useState('');
+  const [modalImageAlt, setModalImageAlt] = useState('');
 
   const productId = params.id as string;
 
   // Get image URL
-  const getImageUrl = (photoName: string | null) => {
+  const getImageUrl = (photoName: string | null | undefined) => {
     if (!photoName) return null;
     if (photoName.startsWith('http://') || photoName.startsWith('https://')) {
       return photoName;
@@ -154,6 +169,32 @@ export default function ProductDetailPage() {
     const imageServerUrl = process.env.NEXT_PUBLIC_IMAGE_SERVER_URL || 'http://192.168.1.110/upload';
     return `${imageServerUrl}/${photoName}`;
   };
+
+  // Open image in modal
+  const openImageModal = (imageUrl: string, altText: string) => {
+    setModalImageUrl(imageUrl);
+    setModalImageAlt(altText);
+    setIsImageModalOpen(true);
+  };
+
+  // Close image modal
+  const closeImageModal = () => {
+    setIsImageModalOpen(false);
+    setModalImageUrl('');
+    setModalImageAlt('');
+  };
+
+  // Handle escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isImageModalOpen) {
+        closeImageModal();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isImageModalOpen]);
 
   // Fetch product details
   useEffect(() => {
@@ -237,17 +278,20 @@ export default function ProductDetailPage() {
                     {item.code}
                   </div>
                   {item.photo && (
-                    <div className="border rounded overflow-hidden bg-muted">
+                    <div 
+                      className="border rounded overflow-hidden bg-muted p-1 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                      onClick={() => openImageModal(getImageUrl(item.photo ?? null) || '', `${title} ${index + 1}`)}
+                    >
                       <img
                         src={getImageUrl(item.photo) || ''}
                         alt={`${title} ${index + 1}`}
-                        className="w-full h-[80px] object-cover"
+                        className="w-full h-[80px] object-cover rounded"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                           e.currentTarget.nextElementSibling?.classList.remove('hidden');
                         }}
                       />
-                      <div className="w-full h-[80px] bg-muted flex items-center justify-center hidden">
+                      <div className="w-full h-[80px] bg-muted flex items-center justify-center hidden rounded">
                         <ImageIcon className="w-6 h-6 text-muted-foreground" />
                       </div>
                     </div>
@@ -308,25 +352,28 @@ export default function ProductDetailPage() {
                 <h3 className="text-lg font-semibold mb-4">Product Images</h3>
 
                 {/* Main Technical Drawing - Mandatory Display */}
-                <div className="mb-4">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1 px-2 pt-2">Technical Drawing</div>
+                <div className="mb-6">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2 px-2 pt-2">Technical Drawing</div>
                   {product.TechDraw ? (
-                    <div className="border rounded-lg overflow-hidden bg-muted">
+                    <div 
+                      className="border rounded-lg overflow-hidden bg-muted p-2 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                      onClick={() => openImageModal(getImageUrl(product.TechDraw ?? null) || '', 'Technical Drawing')}
+                    >
                       <img
                         src={getImageUrl(product.TechDraw) || ''}
                         alt="Technical Drawing"
-                        className="w-full h-[500px] object-contain bg-white"
+                        className="w-full h-[500px] object-contain bg-white rounded"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                           e.currentTarget.nextElementSibling?.classList.remove('hidden');
                         }}
                       />
-                      <div className="w-full h-[500px] bg-white flex items-center justify-center hidden">
+                      <div className="w-full h-[500px] bg-white flex items-center justify-center hidden rounded">
                         <ImageIcon className="w-16 h-16 text-muted-foreground" />
                       </div>
                     </div>
                   ) : (
-                    <div className="border rounded-lg h-[500px] bg-white flex flex-col items-center justify-center">
+                    <div className="border rounded-lg h-[500px] bg-white flex flex-col items-center justify-center p-2">
                       <ImageIcon className="w-16 h-16 text-muted-foreground mb-2" />
                       <span className="text-sm text-muted-foreground">No Technical Drawing Available</span>
                     </div>
@@ -334,31 +381,32 @@ export default function ProductDetailPage() {
                 </div>
 
                 {/* Product Photos - Mandatory Thumbnails */}
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Product Photos</h4>
-                  <div className="grid grid-cols-4 gap-2">
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Photos</h4>
+                  <div className="grid grid-cols-4 gap-3">
                     {[product.Photo1, product.Photo2, product.Photo3, product.Photo4].map((photo, index) => (
-                      <div key={index} className="border rounded overflow-hidden bg-muted">
-                        <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1 px-2 pt-2">
-                          Photo {index + 1}
-                        </div>
+                      <div 
+                        key={index} 
+                        className="border rounded overflow-hidden bg-muted p-1 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                        onClick={() => openImageModal(getImageUrl(photo ?? null) || '', `Product Photo ${index + 1}`)}
+                      >
                         {photo ? (
                           <>
                             <img
                               src={getImageUrl(photo) || ''}
                               alt={`Product Photo ${index + 1}`}
-                              className="w-full h-[80px] object-cover"
+                              className="w-full h-[80px] object-cover rounded"
                               onError={(e) => {
                                 e.currentTarget.style.display = 'none';
                                 e.currentTarget.nextElementSibling?.classList.remove('hidden');
                               }}
                             />
-                            <div className="w-full h-[80px] bg-muted flex items-center justify-center hidden">
+                            <div className="w-full h-[80px] bg-muted flex items-center justify-center hidden rounded">
                               <ImageIcon className="w-6 h-6 text-muted-foreground" />
                             </div>
                           </>
                         ) : (
-                          <div className="w-full h-[80px] bg-muted flex items-center justify-center">
+                          <div className="w-full h-[80px] bg-muted flex items-center justify-center rounded">
                             <ImageIcon className="w-6 h-6 text-muted-foreground" />
                           </div>
                         )}
@@ -568,30 +616,100 @@ export default function ProductDetailPage() {
                       </div>
 
                       {/* 4. Firing Section */}
-                      <div className="space-y-4">
-                        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Firing</h4>
-                        <div className="text-base">
-                          {product.Firing || '-'}
-                        </div>
-                      </div>
-
-                      {/* 5. Temp Section */}
-                      <div className="space-y-4">
-                        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Temp</h4>
-                        <div className="text-base">
-                          {product.GlazeTemp ? `${product.GlazeTemp}°C` : '-'}
-                        </div>
-                      </div>
-
-                      {/* 6. Firing Note Section */}
-                      {product.FiringNote && (
+                      <div className="space-y-6">
+                        {/* High Firing Section */}
                         <div className="space-y-4">
-                          <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Firing Note</h4>
-                          <div className="text-sm whitespace-pre-wrap">
-                            {product.FiringNote}
+                          <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">High Firing</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="text-sm font-medium">Firing Type</label>
+                              <p className="text-base">
+                                {product.Firing || '-'}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium">Temperature</label>
+                              <p className="text-base">
+                                {product.GlazeTemp ? `${product.GlazeTemp}°C` : '-'}
+                              </p>
+                            </div>
+                            <div>
+                              {/* Empty column for spacing */}
+                            </div>
                           </div>
+                          {product.FiringNote && (
+                            <div className="mt-2">
+                              <label className="text-sm font-medium">Firing Notes</label>
+                              <div className="mt-1 p-3 bg-muted/30 rounded">
+                                <div className="text-sm whitespace-pre-wrap">{product.FiringNote}</div>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
+
+                        {/* Luster Firing Section */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Luster Firing</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="text-sm font-medium">Luster</label>
+                              <p className="text-base">
+                                {product.LusterCode || '-'} {product.LusterDescription ? `- ${product.LusterDescription}` : ''}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium">Temperature</label>
+                              <p className="text-base">
+                                {(product.LustreTemp && product.LustreTemp > 0) ? `${product.LustreTemp}°C` : '-'}
+                              </p>
+                            </div>
+                            <div>
+                              {/* Empty column for spacing */}
+                            </div>
+                          </div>
+                          {(product.LustreNote || product.LustreTempNote) && (
+                            <div className="space-y-2">
+                              {product.LustreNote && (
+                                <div>
+                                  <label className="text-sm font-medium">Luster Notes</label>
+                                  <div className="mt-1 p-3 bg-muted/30 rounded">
+                                    <div className="text-sm whitespace-pre-wrap">{product.LustreNote}</div>
+                                  </div>
+                                </div>
+                              )}
+                              {product.LustreTempNote && (
+                                <div>
+                                  <label className="text-sm font-medium">Luster Posisi</label>
+                                  <div className="mt-1 p-3 bg-muted/30 rounded">
+                                    <div className="text-sm whitespace-pre-wrap">{product.LustreTempNote}</div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 5. Additional Lusters */}
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Additional Lusters</h4>
+                        <div className="grid grid-cols-4 gap-4">
+                          {[
+                            { code: product.Luster2Code, description: product.Luster2Description },
+                            { code: product.Luster3Code, description: product.Luster3Description },
+                            { code: product.Luster4Code, description: product.Luster4Description }
+                          ].map((luster, index) => (
+                            <div key={index} className="text-sm">
+                              <div className="font-medium">{luster.code || '-'}</div>
+                              <div>{luster.description || ''}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 6. Luster Note Section - REMOVED (moved to Luster Firing section) */}
+
+                      {/* 7. Firing Note Section - REMOVED (moved to High Firing section) */}
 
                       {/* Glaze Notes */}
                       {product.GlazeNotes && (
@@ -672,17 +790,26 @@ export default function ProductDetailPage() {
                     <CardContent className="p-4">
                       <div className="aspect-square mb-3">
                         {item.Photo1 ? (
-                          <img
-                            src={getImageUrl(item.Photo1) || ''}
-                            alt="Product"
-                            className="w-full h-full object-cover rounded-md"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                            }}
-                          />
+                          <div 
+                            className="rounded-md overflow-hidden p-1 bg-muted cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                            onClick={() => openImageModal(getImageUrl(item.Photo1 ?? null) || '', `Related Product - ${item.DesignName}`)}
+                          >
+                            <img
+                              src={getImageUrl(item.Photo1) || ''}
+                              alt="Product"
+                              className="w-full h-full object-cover rounded"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.parentElement?.classList.add('hidden');
+                                e.currentTarget.parentElement?.nextElementSibling?.classList.remove('hidden');
+                              }}
+                            />
+                            <div className="w-full h-full bg-muted rounded-md flex items-center justify-center hidden">
+                              <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                            </div>
+                          </div>
                         ) : (
-                          <div className="w-full h-full bg-muted rounded-md flex items-center justify-center">
+                          <div className="w-full h-full bg-muted rounded-md flex items-center justify-center p-1">
                             <ImageIcon className="w-8 h-8 text-muted-foreground" />
                           </div>
                         )}
@@ -703,6 +830,35 @@ export default function ProductDetailPage() {
           </Card>
         )}
       </div>
+      
+      {/* Image Modal */}
+      {isImageModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
+          onClick={closeImageModal}
+        >
+          <div 
+            className="relative max-w-6xl max-h-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-4 right-4 bg-black bg-opacity-50 text-white rounded-full p-2 hover:bg-opacity-75 transition-all"
+              onClick={closeImageModal}
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <img
+              src={modalImageUrl}
+              alt={modalImageAlt}
+              className="max-h-[90vh] max-w-full object-contain"
+            />
+            {/* Hidden title - uncomment if needed */}
+            {/* <div className="absolute bottom-4 left-0 right-0 text-center text-white bg-black bg-opacity-50 py-2 px-4 truncate">
+              {modalImageAlt}
+            </div> */}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

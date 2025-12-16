@@ -111,6 +111,15 @@ export default function EnhancedStockManagement() {
   const [offerDialogOpen, setOfferDialogOpen] = useState(false);
   const [selectedStock, setSelectedStock] = useState<StockEntry | null>(null);
   
+  // Grab stock states
+  const [grabDialogOpen, setGrabDialogOpen] = useState(false);
+  const [designs, setDesigns] = useState<Array<{DesignCode: string, DesignName: string}>>([]);
+  const [categories, setCategories] = useState<Array<{CategoryCode: string, CategoryName: string}>>([]);
+  const [grabProducts, setGrabProducts] = useState<Array<{ID: number, ClientCode: string, CollectCode: string, DesignName: string, CategoryName: string, SizeName: string, Photo1?: string | null}>>([]);
+  const [selectedDesign, setSelectedDesign] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedGrabProduct, setSelectedGrabProduct] = useState<number | null>(null);
+  
   // Filter states
   const [filters, setFilters] = useState({
     clientCode: '',
@@ -141,6 +150,20 @@ export default function EnhancedStockManagement() {
     quantity: 0,
     notes: '',
     expiryDays: 7
+  });
+
+  const [grabFormData, setGrabFormData] = useState({
+    clientCode: '',
+    designCode: '',
+    productId: 0,
+    department: '',
+    region: '',
+    quantityIn: 0,
+    isStockInSetComplete: false,
+    isLid: false,
+    isBody: false,
+    notes: '',
+    expirationYears: 2
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -215,6 +238,126 @@ export default function EnhancedStockManagement() {
     fetchProducts();
     fetchOffers();
   }, [filters, pagination.page, pagination.limit]);
+
+  // Fetch designs for grab dropdown
+  const fetchDesigns = async () => {
+    try {
+      const response = await fetch('/api/stock/enhanced/grab?type=designs');
+      const result = await response.json();
+      if (result.success) {
+        setDesigns(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching designs:', error);
+    }
+  };
+
+  // Fetch categories based on selected design
+  const fetchCategories = async (designCode: string) => {
+    try {
+      const response = await fetch(`/api/stock/enhanced/grab?type=categories&designCode=${designCode}`);
+      const result = await response.json();
+      if (result.success) {
+        setCategories(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  // Fetch products based on selected design
+  const fetchGrabProducts = async (designCode: string) => {
+    try {
+      const response = await fetch(`/api/stock/enhanced/grab?type=products&designCode=${designCode}`);
+      const result = await response.json();
+      if (result.success) {
+        setGrabProducts(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    }
+  };
+
+  // Handle design selection
+  const handleDesignChange = (designCode: string) => {
+    setSelectedDesign(designCode);
+    setGrabProducts([]);
+    setSelectedGrabProduct(null);
+    setGrabFormData(prev => ({ ...prev, designCode, productId: 0 }));
+    
+    if (designCode) {
+      fetchGrabProducts(designCode);
+    } else {
+      setGrabProducts([]);
+    }
+  };
+
+  // Handle product selection
+  const handleProductChange = (productId: number) => {
+    setSelectedGrabProduct(productId);
+    setGrabFormData(prev => ({ ...prev, productId }));
+    
+    const product = grabProducts.find(p => p.ID === productId);
+    if (product && product.ClientCode) {
+      setGrabFormData(prev => ({ ...prev, clientCode: product.ClientCode }));
+    }
+  };
+
+  // Create grab stock entry
+  const handleCreateGrabStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDesign || !grabFormData.productId) {
+      toast.error('Please select both design and product');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await fetch('/api/stock/enhanced/grab', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(grabFormData)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success('Grab stock entry created successfully');
+        setGrabDialogOpen(false);
+        setGrabFormData({
+          clientCode: '',
+          designCode: '',
+          productId: 0,
+          department: '',
+          region: '',
+          quantityIn: 0,
+          isStockInSetComplete: false,
+          isLid: false,
+          isBody: false,
+          notes: '',
+          expirationYears: 2
+        });
+        setSelectedDesign('');
+        setGrabProducts([]);
+        setSelectedGrabProduct(null);
+        fetchStockEntries();
+      } else {
+        toast.error(result.error || 'Failed to create grab stock entry');
+      }
+    } catch (error) {
+      console.error('Error creating grab stock entry:', error);
+      toast.error('Failed to create grab stock entry');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Initialize designs when grab dialog opens
+  useEffect(() => {
+    if (grabDialogOpen) {
+      fetchDesigns();
+    }
+  }, [grabDialogOpen]);
 
   // Create stock entry
   const handleCreateStock = async (e: React.FormEvent) => {
@@ -376,10 +519,16 @@ export default function EnhancedStockManagement() {
           </h1>
           <p className="text-muted-foreground">Manage stock with client selection and product integration</p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Stock Entry
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Stock Entry
+          </Button>
+          <Button variant="outline" onClick={() => setGrabDialogOpen(true)}>
+            <Package className="h-4 w-4 mr-2" />
+            Grab Stock Entry
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -889,6 +1038,179 @@ export default function EnhancedStockManagement() {
                 {submitting ? 'Creating...' : 'Create Offer'}
               </Button>
               <Button type="button" variant="outline" onClick={() => setOfferDialogOpen(false)} className="flex-1">
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Grab Stock Entry Dialog */}
+      <Dialog open={grabDialogOpen} onOpenChange={setGrabDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Grab Stock Entry</DialogTitle>
+            <DialogDescription>
+              Add new stock entry with cascading design and category selection
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateGrabStock} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Client Code</Label>
+                <Input
+                  value={grabFormData.clientCode}
+                  onChange={(e) => setGrabFormData(prev => ({ ...prev, clientCode: e.target.value }))}
+                  placeholder="Enter client code"
+                  required
+                />
+              </div>
+              <div>
+                <Label>Design Name</Label>
+                <Select onValueChange={handleDesignChange} value={selectedDesign}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a design" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {designs.map((design) => (
+                      <SelectItem key={design.DesignCode} value={design.DesignCode}>
+                        {design.DesignName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div>
+              <Label>Available Products</Label>
+              <Select
+                onValueChange={(value) => handleProductChange(parseInt(value))}
+                value={selectedGrabProduct?.toString() || ''}
+                disabled={!selectedDesign}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a product" />
+                </SelectTrigger>
+                <SelectContent>
+                  {grabProducts.map((product) => (
+                    <SelectItem key={product.ID} value={product.ID.toString()}>
+                      {product.CollectCode} - {product.DesignName} - {product.CategoryName} {product.SizeName && `- ${product.SizeName}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Department</Label>
+                <Input
+                  value={grabFormData.department}
+                  onChange={(e) => setGrabFormData(prev => ({ ...prev, department: e.target.value }))}
+                  placeholder="Enter department"
+                />
+              </div>
+              <div>
+                <Label>Region</Label>
+                <Input
+                  value={grabFormData.region}
+                  onChange={(e) => setGrabFormData(prev => ({ ...prev, region: e.target.value }))}
+                  placeholder="Enter region"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Quantity</Label>
+                <Input
+                  type="number"
+                  value={grabFormData.quantityIn}
+                  onChange={(e) => setGrabFormData(prev => ({ ...prev, quantityIn: parseInt(e.target.value) || 0 }))}
+                  placeholder="Enter quantity"
+                  min="1"
+                  required
+                />
+              </div>
+              <div>
+                <Label>Expiration Years</Label>
+                <Select value={grabFormData.expirationYears.toString()} onValueChange={(value) => setGrabFormData(prev => ({ ...prev, expirationYears: parseInt(value) }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2">2 Years</SelectItem>
+                    <SelectItem value="5">5 Years</SelectItem>
+                    <SelectItem value="10">10 Years</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="grabIsStockInSetComplete"
+                  checked={grabFormData.isStockInSetComplete}
+                  onCheckedChange={(checked) => setGrabFormData(prev => ({ ...prev, isStockInSetComplete: checked as boolean }))}
+                />
+                <Label htmlFor="grabIsStockInSetComplete">Set Complete</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="grabIsLid"
+                  checked={grabFormData.isLid}
+                  onCheckedChange={(checked) => setGrabFormData(prev => ({ ...prev, isLid: checked as boolean }))}
+                />
+                <Label htmlFor="grabIsLid">Includes Lid</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="grabIsBody"
+                  checked={grabFormData.isBody}
+                  onCheckedChange={(checked) => setGrabFormData(prev => ({ ...prev, isBody: checked as boolean }))}
+                />
+                <Label htmlFor="grabIsBody">Includes Body</Label>
+              </div>
+            </div>
+
+            <div>
+              <Label>Notes</Label>
+              <Textarea
+                value={grabFormData.notes}
+                onChange={(e) => setGrabFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Enter any additional notes"
+                rows={3}
+              />
+            </div>
+
+            {selectedDesign && selectedGrabProduct && (
+              <Alert>
+                <Package className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Selected Design:</strong> {designs.find(d => d.DesignCode === selectedDesign)?.DesignName}
+                  {selectedGrabProduct && (
+                    <div className="mt-2">
+                      <strong>Selected Product:</strong> {grabProducts.find(p => p.ID === selectedGrabProduct)?.CollectCode}
+                      {grabProducts.find(p => p.ID === selectedGrabProduct)?.Photo1 && (
+                        <img
+                          src={grabProducts.find(p => p.ID === selectedGrabProduct)?.Photo1}
+                          alt="Product"
+                          className="w-16 h-16 object-cover rounded mt-2"
+                        />
+                      )}
+                    </div>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex gap-2">
+              <Button type="submit" disabled={submitting || !selectedDesign || !grabFormData.productId} className="flex-1">
+                {submitting ? 'Creating...' : 'Create Grab Stock Entry'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setGrabDialogOpen(false)} className="flex-1">
                 Cancel
               </Button>
             </div>

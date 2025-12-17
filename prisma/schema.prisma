@@ -86,6 +86,7 @@ model User {
   // Relations
   stockEntries StockEntry[]
   stockOffers  StockOffer[]
+  stocks       Stock[]
 
   @@map("users")
 }
@@ -112,44 +113,24 @@ model StockEntry {
 
   // Relations
   creator User         @relation(fields: [createdBy], references: [id])
-  offers  StockOffer[]
 
   @@map("stock_entries")
 }
 
-model StockOffer {
-  id           String      @id @default(cuid())
-  stockEntryId String
-  clientId     String // Client being offered to
-  quantity     Int
-  status       OfferStatus @default(pending)
-  offerDate    DateTime    @default(now())
-  expiryDate   DateTime // When offer expires
-  notes        String?
-  createdBy    String
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
 
-  // Relations
-  stockEntry StockEntry @relation(fields: [stockEntryId], references: [id])
-  creator    User       @relation(fields: [createdBy], references: [id])
+// model Client {
+//   id         String   @id @default(cuid())
+//   clientCode String   @unique
+//   name       String
+//   email      String?
+//   phone      String?
+//   address    String?
+//   isActive   Boolean  @default(true)
+//   createdAt  DateTime @default(now())
+//   updatedAt  DateTime @updatedAt
 
-  @@map("stock_offers")
-}
-
-model Client {
-  id         String   @id @default(cuid())
-  clientCode String   @unique
-  name       String
-  email      String?
-  phone      String?
-  address    String?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@map("clients")
-}
+//   @@map("clients")
+// }
 
 // Enums
 enum UserRole {
@@ -167,10 +148,19 @@ enum OfferStatus {
   cancelled
 }
 
+enum NotificationType {
+  EXPIRATION_WARNING
+  EXPIRATION_NOTICE
+  LOW_STOCK
+  OFFER_EXPIRY
+}
+
+// Enhanced Stock Management with Warehouse Support
 model Stock {
   id String @id @default(cuid())
 
   // -- Product Properties (Mirrored from MySQL Collections) --
+  productId    Int    // References MySQL tblcollect_master.ID
   designCode   String
   clientCode   String
   nameCode     String?
@@ -184,19 +174,120 @@ model Stock {
   // -- Internal Stock Fields --
   department String?
   region     String?
+  warehouseId String?
+  shelfId     String?
 
-  totalQuantity     Int @default(0)
+  // -- Stock Quantities --
+  qty_in           Int @default(0)
+  qty_offer        Int @default(0)
+  total            Int @default(0)
   availableQuantity Int @default(0)
-  reservedQuantity  Int @default(0)
+
+  // -- Stock Properties --
+  isComplated_set Boolean @default(false)
+  isBody_only     Boolean @default(false)
+  isLid_only      Boolean @default(false)
+  
+  // -- Expiration Tracking --
+  expirationYears  Int         @default(2) // 2, 5, or 10 years
+  expirationDate   DateTime?   // Calculated based on expirationYears
+  lastNotifiedDate DateTime?   // Track when expiration notification was sent
 
   status StockStatus @default(available)
   notes  String?
 
-  updatedAt DateTime @updatedAt
+  createdBy String
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  creator   User      @relation(fields: [createdBy], references: [id])
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
+  shelf     Shelf?     @relation(fields: [shelfId], references: [id])
+  offers    StockOffer[]
+  notifications StockNotification[]
 
   // Indexes for faster lookup
   @@index([designCode])
   @@index([clientCode])
+  @@index([productId])
+  @@index([warehouseId])
+  @@index([expirationDate])
   @@map("stocks")
+}
+
+// Warehouse Management
+model Warehouse {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String   @unique
+  location    String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  stocks Stock[]
+  shelves Shelf[]
+
+  @@map("warehouses")
+}
+
+// Shelf Management within Warehouses
+model Shelf {
+  id          String   @id @default(cuid())
+  warehouseId String
+  code        String
+  row         String?
+  column      String?
+  level       String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  stocks    Stock[]
+
+  @@unique([warehouseId, code])
+  @@map("shelves")
+}
+
+// Stock Expiration Notifications
+model StockNotification {
+  id        String   @id @default(cuid())
+  stockId   String
+  type      NotificationType
+  message   String
+  isRead    Boolean  @default(false)
+  sentAt    DateTime @default(now())
+  readAt    DateTime?
+
+  // Relations
+  stock Stock @relation(fields: [stockId], references: [id])
+
+  @@map("stock_notifications")
+}
+
+// Enhanced Stock Offer with better tracking
+model StockOffer {
+  id           String      @id @default(cuid())
+  stockId      String
+  clientId     String // Client being offered to
+  quantity     Int
+  status       OfferStatus @default(pending)
+  offerDate    DateTime    @default(now())
+  expiryDate   DateTime // When offer expires
+  notes        String?
+  createdBy    String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relations
+  stock   Stock @relation(fields: [stockId], references: [id])
+  creator User  @relation(fields: [createdBy], references: [id])
+
+  @@map("stock_offers")
 }

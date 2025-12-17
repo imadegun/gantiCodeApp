@@ -1,180 +1,178 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/lib/mysql'
-import { verifyToken, canAccessStock } from '@/lib/auth'
-import { db } from '@/lib/db'
-import { z } from 'zod'
+import { NextRequest, NextResponse } from 'next/server';
+import { query } from '@/lib/mysql';
 
-const searchParamsSchema = z.object({
-  search: z.string().optional(),
-  category: z.string().optional(),
-  design: z.string().optional(),
-  clientCode: z.string().optional(),
-  page: z.string().transform(Number).default(1),
-  limit: z.string().transform(Number).default(50)
-})
-
-// GET /api/stock/products - Get products for stock selection
+// GET /api/stock/products - Get products from MySQL for stock creation
 export async function GET(request: NextRequest) {
   try {
-    // Verify authentication and authorization
-    const token = request.cookies.get('auth-token')?.value
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      )
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get('search');
+    const clientCode = searchParams.get('clientCode');
+    const designCode = searchParams.get('designCode');
+    const categoryCode = searchParams.get('categoryCode');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
+    const offset = (page - 1) * limit;
+
+    let whereClause = 'WHERE 1=1';
+    const params: any[] = [];
+
+    if (search) {
+      whereClause += ` AND (m.CollectCode LIKE ? OR m.ClientCode LIKE ? OR d.DesignName LIKE ? OR n.NameDesc LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
-    const decoded = verifyToken(token)
-    if (!decoded) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      )
+    if (clientCode) {
+      whereClause += ` AND m.ClientCode = ?`;
+      params.push(clientCode);
     }
 
-    const user = await db.user.findUnique({
-      where: { id: decoded.id },
-      select: { role: true }
-    })
-
-    if (!user || !canAccessStock(user.role)) {
-      return NextResponse.json(
-        { success: false, error: 'Stock access required' },
-        { status: 403 }
-      )
+    if (designCode) {
+      whereClause += ` AND m.DesignCode = ?`;
+      params.push(designCode);
     }
 
-    // Parse query parameters
-    const { searchParams } = new URL(request.url)
-    const params = searchParamsSchema.parse(Object.fromEntries(searchParams))
-
-    // Build WHERE clause
-    let whereClause = 'WHERE 1=1'
-    const queryParams: any[] = []
-
-    if (params.search) {
-      whereClause += ` AND (
-        m.CollectCode LIKE ? OR 
-        m.ClientCode LIKE ? OR 
-        m.NameCode LIKE ? OR 
-        d.DesignName LIKE ? OR 
-        c.CategoryName LIKE ? OR 
-        s.SizeName LIKE ?
-      )`
-      const searchTerm = `%${params.search}%`
-      queryParams.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm)
+    if (categoryCode) {
+      whereClause += ` AND m.CategoryCode = ?`;
+      params.push(categoryCode);
     }
 
-    if (params.category) {
-      whereClause += ' AND c.CategoryCode = ?'
-      queryParams.push(params.category)
-    }
-
-    if (params.design) {
-      whereClause += ' AND d.DesignCode = ?'
-      queryParams.push(params.design)
-    }
-
-    if (params.clientCode) {
-      whereClause += ' AND m.ClientCode LIKE ?'
-      queryParams.push(`%${params.clientCode}%`)
-    }
-
-    // Get pagination info
-    const offset = (params.page - 1) * params.limit
-
-    // Main query for products
     const productsQuery = `
-      SELECT 
-        m.ID,
-        m.CollectCode,
-        m.ClientCode,
-        m.DesignCode,
-        m.NameCode,
-        m.CategoryCode,
-        m.SizeCode,
-        m.Photo1,
-        m.Photo2,
-        d.DesignName,
-        c.CategoryName,
-        s.SizeName,
-        m.Width,
-        m.Height,
-        m.Length,
-        m.Diameter,
-        m.SampCeramicVolume,
-        m.Clay,
-        m.BuildTech,
-        m.Glaze1,
-        m.Glaze2,
-        m.Glaze3,
-        m.Glaze4,
-        m.GlazeTemp,
-        m.Firing,
-        m.History
+      SELECT m.ID, m.CollectCode, m.DesignCode, m.NameCode, m.CategoryCode, 
+             m.SizeCode, m.ColorCode, m.TextureCode, m.MaterialCode, m.ClientCode,
+             m.Photo1, m.Photo2, m.PriceDollar, m.PriceEuro,
+             d.DesignName, n.NameDesc, c.CategoryName, co.ColorName, 
+             t.TextureName, s.SizeName, ma.MaterialName
       FROM tblcollect_master m
       LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
+      LEFT JOIN tblcollect_name n ON m.NameCode = n.NameCode
       LEFT JOIN tblcollect_category c ON m.CategoryCode = c.CategoryCode
+      LEFT JOIN tblcollect_color co ON m.ColorCode = co.ColorCode
+      LEFT JOIN tblcollect_texture t ON m.TextureCode = t.TextureCode
       LEFT JOIN tblcollect_size s ON m.SizeCode = s.SizeCode
+      LEFT JOIN tblcollect_material ma ON m.MaterialCode = ma.MaterialCode
       ${whereClause}
       ORDER BY m.CollectCode
       LIMIT ? OFFSET ?
-    `
+    `;
 
-    // Count query
     const countQuery = `
       SELECT COUNT(*) as total
       FROM tblcollect_master m
       LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
+      LEFT JOIN tblcollect_name n ON m.NameCode = n.NameCode
       LEFT JOIN tblcollect_category c ON m.CategoryCode = c.CategoryCode
+      LEFT JOIN tblcollect_color co ON m.ColorCode = co.ColorCode
+      LEFT JOIN tblcollect_texture t ON m.TextureCode = t.TextureCode
       LEFT JOIN tblcollect_size s ON m.SizeCode = s.SizeCode
+      LEFT JOIN tblcollect_material ma ON m.MaterialCode = ma.MaterialCode
       ${whereClause}
-    `
+    `;
 
     const [products, countResult] = await Promise.all([
-      query(productsQuery, [...queryParams, params.limit, offset]) as any,
-      query(countQuery, queryParams) as any
-    ])
+      query(productsQuery, [...params, limit, offset]) as any[],
+      query(countQuery, params) as any[]
+    ]);
 
-    const productsData = Array.isArray(products) ? products : []
-    const countData = Array.isArray(countResult) ? countResult : []
-    const total = countData.length > 0 ? countData[0].total : 0
-
-    // Get unique values for filters
-    const [categories, designs, clientCodes] = await Promise.all([
-      query('SELECT DISTINCT c.CategoryCode, c.CategoryName FROM tblcollect_category c ORDER BY c.CategoryName') as any,
-      query('SELECT DISTINCT d.DesignCode, d.DesignName FROM tblcollect_design d ORDER BY d.DesignName') as any,
-      query('SELECT DISTINCT ClientCode FROM tblcollect_master WHERE ClientCode IS NOT NULL ORDER BY ClientCode') as any
-    ])
-
-    const categoriesData = Array.isArray(categories) ? categories : []
-    const designsData = Array.isArray(designs) ? designs : []
-    const clientCodesData = Array.isArray(clientCodes) ? clientCodes : []
+    const total = countResult && countResult.length > 0 ? countResult[0].total : 0;
+    const totalPages = Math.ceil(total / limit);
 
     return NextResponse.json({
       success: true,
       data: {
-        products: productsData,
+        products: products || [],
         pagination: {
-          page: params.page,
-          limit: params.limit,
+          page,
+          limit,
           total,
-          totalPages: Math.ceil(total / params.limit)
-        },
-        filters: {
-          categories: categoriesData,
-          designs: designsData,
-          clientCodes: clientCodesData.map(cc => cc.ClientCode).filter(Boolean)
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1
         }
       }
-    })
-
+    });
   } catch (error) {
-    console.error('Get products for stock error:', error)
+    console.error('Error fetching products:', error);
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: 'Failed to fetch products' },
       { status: 500 }
-    )
+    );
+  }
+}
+
+// GET /api/stock/products/[id] - Get single product by ID
+export async function getProductById(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const productId = params.id;
+
+    const productRows = await query(
+      `SELECT m.ID, m.CollectCode, m.DesignCode, m.NameCode, m.CategoryCode, 
+              m.SizeCode, m.ColorCode, m.TextureCode, m.MaterialCode, m.ClientCode,
+              m.Photo1, m.Photo2, m.Photo3, m.Photo4, m.PriceDollar, m.PriceEuro,
+              m.Width, m.Height, m.Length, m.Diameter, m.Description,
+              d.DesignName, n.NameDesc, c.CategoryName, co.ColorName, 
+              t.TextureName, s.SizeName, ma.MaterialName
+       FROM tblcollect_master m
+       LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
+       LEFT JOIN tblcollect_name n ON m.NameCode = n.NameCode
+       LEFT JOIN tblcollect_category c ON m.CategoryCode = c.CategoryCode
+       LEFT JOIN tblcollect_color co ON m.ColorCode = co.ColorCode
+       LEFT JOIN tblcollect_texture t ON m.TextureCode = t.TextureCode
+       LEFT JOIN tblcollect_size s ON m.SizeCode = s.SizeCode
+       LEFT JOIN tblcollect_material ma ON m.MaterialCode = ma.MaterialCode
+       WHERE m.ID = ?`,
+      [productId]
+    ) as any[];
+
+    if (!productRows || productRows.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Product not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: productRows[0]
+    });
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch product' },
+      { status: 500 }
+    );
+  }
+}
+
+// GET /api/stock/products/options - Get product options (dropdowns)
+export async function getProductOptions() {
+  try {
+    const [designs, names, categories, colors, textures, sizes, materials] = await Promise.all([
+      query('SELECT DesignCode, DesignName FROM tblcollect_design ORDER BY DesignName') as any[],
+      query('SELECT NameCode, NameDesc FROM tblcollect_name ORDER BY NameDesc') as any[],
+      query('SELECT CategoryCode, CategoryName FROM tblcollect_category ORDER BY CategoryName') as any[],
+      query('SELECT ColorCode, ColorName FROM tblcollect_color ORDER BY ColorName') as any[],
+      query('SELECT TextureCode, TextureName FROM tblcollect_texture ORDER BY TextureName') as any[],
+      query('SELECT SizeCode, SizeName FROM tblcollect_size ORDER BY SizeName') as any[],
+      query('SELECT MaterialCode, MaterialName FROM tblcollect_material ORDER BY MaterialName') as any[]
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        designs: designs || [],
+        names: names || [],
+        categories: categories || [],
+        colors: colors || [],
+        textures: textures || [],
+        sizes: sizes || [],
+        materials: materials || []
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching product options:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch product options' },
+      { status: 500 }
+    );
   }
 }

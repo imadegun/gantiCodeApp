@@ -12,28 +12,105 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Plus, Package, TrendingUp, TrendingDown, Eye, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Plus, Package, TrendingUp, TrendingDown, Eye, CheckCircle, XCircle, AlertTriangle, Bell, Warehouse, Calendar } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface StockItem {
   id: string;
-  type: 'clientcode' | 'designcode';
-  code: string;
-  quantityAvailable?: number;
-  quantityReserved?: number;
-  totalQuantity?: number;
-  availableQuantity?: number;
-  reservedQuantity?: number;
+  productId: number;
+  designCode: string;
+  clientCode: string;
+  nameCode?: string;
+  categoryCode?: string;
+  colorCode?: string;
+  textureCode?: string;
+  sizeCode?: string;
+  materialCode?: string;
+  photo1?: string;
+  qty_in: number;
+  qty_offer: number;
+  total: number;
+  availableQuantity: number;
+  isComplated_set: boolean;
+  isBody_only: boolean;
+  isLid_only: boolean;
+  expirationYears: number;
+  expirationDate?: string;
   status: 'available' | 'low_stock' | 'out_of_stock';
-  lastUpdated: string;
+  notes?: string;
+  warehouse?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  shelf?: {
+    id: string;
+    code: string;
+    row?: string;
+    column?: string;
+    level?: string;
+  };
   product: any;
+  isExpiringSoon?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Warehouse {
+  id: string;
+  name: string;
+  code: string;
+  location?: string;
+  description?: string;
+  isActive: boolean;
+  shelves: Shelf[];
+  _count: {
+    stocks: number;
+  };
+}
+
+interface Shelf {
+  id: string;
+  warehouseId: string;
+  code: string;
+  row?: string;
+  column?: string;
+  level?: string;
+  description?: string;
+  isActive: boolean;
+  warehouse: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  _count: {
+    stocks: number;
+  };
 }
 
 interface IncomingStock {
-  type: 'clientcode' | 'designcode';
-  code: string;
-  quantity: number;
-  source: string;
+  productId: number;
+  qty_in: number;
+  isComplated_set: boolean;
+  isBody_only: boolean;
+  isLid_only: boolean;
+  expirationYears: number;
+  warehouseId?: string;
+  shelfId?: string;
+  notes?: string;
+  createdBy: string;
+}
+
+interface Notification {
+  id: string;
+  stockId: string;
+  type: 'EXPIRATION_WARNING' | 'EXPIRATION_NOTICE' | 'LOW_STOCK' | 'OFFER_EXPIRY';
+  message: string;
+  isRead: boolean;
+  sentAt: string;
+  readAt?: string;
+  stock?: StockItem;
 }
 
 export default function StockManagement() {

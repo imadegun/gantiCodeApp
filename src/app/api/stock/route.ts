@@ -22,7 +22,19 @@ export async function GET(request: NextRequest) {
       // Get product info from MySQL for each stock item
       for (const stock of clientCodeStock) {
         const productRows = await query(
-          'SELECT ID, CollectCode, DesignCode, NameCode, CategoryCode, SizeCode, Photo1, Photo2 FROM tblcollect_master WHERE ClientCode = ? LIMIT 1',
+          `SELECT m.ID, m.CollectCode, m.DesignCode, m.NameCode, m.CategoryCode, m.SizeCode,
+                  m.ColorCode, m.TextureCode, m.MaterialCode, m.Photo1, m.Photo2,
+                  d.DesignName, n.NameDesc, c.CategoryName, co.ColorName,
+                  t.TextureName, s.SizeName, ma.MaterialName
+           FROM tblcollect_master m
+           LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
+           LEFT JOIN tblcollect_name n ON m.NameCode = n.NameCode
+           LEFT JOIN tblcollect_category c ON m.CategoryCode = c.CategoryCode
+           LEFT JOIN tblcollect_color co ON m.ColorCode = co.ColorCode
+           LEFT JOIN tblcollect_texture t ON m.TextureCode = t.TextureCode
+           LEFT JOIN tblcollect_size s ON m.SizeCode = s.SizeCode
+           LEFT JOIN tblcollect_material ma ON m.MaterialCode = ma.MaterialName
+           WHERE m.ClientCode = ? LIMIT 1`,
           [stock.clientCode]
         ) as any[];
 
@@ -49,7 +61,12 @@ export async function GET(request: NextRequest) {
 
       for (const stock of designCodeStock) {
         const productRows = await query(
-          'SELECT d.DesignName, COUNT(*) as productCount FROM tblcollect_design d LEFT JOIN tblcollect_master m ON d.DesignCode = m.DesignCode WHERE d.DesignCode = ? GROUP BY d.DesignCode, d.DesignName',
+          `SELECT d.DesignName, COUNT(*) as productCount,
+                  GROUP_CONCAT(DISTINCT m.ClientCode) as clientCodes
+           FROM tblcollect_design d
+           LEFT JOIN tblcollect_master m ON d.DesignCode = m.DesignCode
+           WHERE d.DesignCode = ?
+           GROUP BY d.DesignCode, d.DesignName`,
           [stock.designCode]
         ) as any[];
 

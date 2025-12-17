@@ -42,13 +42,8 @@ const navigationItems = [
     href: '/stock',
     icon: Warehouse,
     description: 'Stock management and tracking'
-  },
-  {
-    name: 'Enhanced Stock',
-    href: '/stock/enhanced',
-    icon: Package,
-    description: 'Advanced stock management with client selection'
   }
+
 ];
 
 export function Navigation() {

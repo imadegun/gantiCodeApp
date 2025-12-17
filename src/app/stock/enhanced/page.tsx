@@ -13,464 +13,248 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Package, 
-  Eye, 
-  Clock,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  Calendar,
-  User,
-  TrendingUp
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { StockStatus, OfferStatus } from '@prisma/client';
+import { Plus, Package, TrendingUp, TrendingDown, Eye, CheckCircle, XCircle, AlertTriangle, Bell, Warehouse, Calendar, Search } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+
+interface StockItem {
+  id: string;
+  productId: number;
+  designCode: string;
+  clientCode: string;
+  nameCode?: string;
+  categoryCode?: string;
+  colorCode?: string;
+  textureCode?: string;
+  sizeCode?: string;
+  materialCode?: string;
+  photo1?: string;
+  qty_in: number;
+  qty_offer: number;
+  total: number;
+  availableQuantity: number;
+  isComplated_set: boolean;
+  isBody_only: boolean;
+  isLid_only: boolean;
+  expirationYears: number;
+  expirationDate?: string;
+  status: 'available' | 'low_stock' | 'out_of_stock';
+  notes?: string;
+  warehouse?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  shelf?: {
+    id: string;
+    code: string;
+    row?: string;
+    column?: string;
+    level?: string;
+  };
+  product: any;
+  isExpiringSoon?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Warehouse {
+  id: string;
+  name: string;
+  code: string;
+  location?: string;
+  description?: string;
+  isActive: boolean;
+  shelves: any[];
+  _count: {
+    stocks: number;
+  };
+}
+
+interface IncomingStock {
+  productId: number;
+  qty_in: number;
+  isComplated_set: boolean;
+  isBody_only: boolean;
+  isLid_only: boolean;
+  expirationYears: number;
+  warehouseId?: string;
+  shelfId?: string;
+  notes?: string;
+  createdBy: string;
+}
 
 interface Product {
   ID: number;
   CollectCode: string;
-  ClientCode: string | null;
   DesignCode: string;
   NameCode: string;
   CategoryCode: string;
   SizeCode: string;
-  Photo1: string | null;
-  Photo2: string | null;
+  ColorCode: string;
+  TextureCode: string;
+  MaterialCode: string;
+  ClientCode: string;
+  Photo1: string;
+  Photo2: string;
   DesignName: string;
+  NameDesc: string;
   CategoryName: string;
+  ColorName: string;
+  TextureName: string;
   SizeName: string;
-  Width?: number;
-  Height?: number;
-  Length?: number;
-  Diameter?: number;
-}
-
-interface StockEntry {
-  id: string;
-  clientCode: string;
-  designCode: string;
-  productId: number;
-  department?: string | null;
-  region?: string | null;
-  quantityIn: number;
-  isStockInSetComplete: boolean;
-  isLid: boolean;
-  isBody: boolean;
-  status: StockStatus;
-  notes?: string | null;
-  expirationYears: number;
-  expirationDate: string;
-  createdAt: string;
-  updatedAt: string;
-  product: Product | null;
-  totalOffered: number;
-  availableQuantity: number;
-  creator: {
-    id: string;
-    username: string;
-    name?: string | null;
-  };
-  offers: Array<{
-    id: string;
-    quantity: number;
-    clientId: string;
-    status: OfferStatus;
-    expiryDate: string;
-  }>;
-}
-
-interface StockOffer {
-  id: string;
-  stockEntryId: string;
-  clientId: string;
-  quantity: number;
-  status: OfferStatus;
-  offerDate: string;
-  expiryDate: string;
-  notes?: string | null;
-  stockEntry: StockEntry;
-  creator: {
-    id: string;
-    username: string;
-    name?: string | null;
-  };
+  MaterialName: string;
 }
 
 export default function EnhancedStockManagement() {
-  const [stockEntries, setStockEntries] = useState<StockEntry[]>([]);
+  const [stockData, setStockData] = useState<StockItem[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [offers, setOffers] = useState<StockOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [warehouseFilter, setWarehouseFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [incomingStock, setIncomingStock] = useState<IncomingStock>({
+    productId: 0,
+    qty_in: 0,
+    isComplated_set: false,
+    isBody_only: false,
+    isLid_only: false,
+    expirationYears: 2,
+    warehouseId: '',
+    shelfId: '',
+    notes: '',
+    createdBy: 'current-user' // This should come from auth context
+  });
+  const [selectedStock, setSelectedStock] = useState<StockItem | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [offerDialogOpen, setOfferDialogOpen] = useState(false);
-  const [selectedStock, setSelectedStock] = useState<StockEntry | null>(null);
-  
-  // Grab stock states
-  const [grabDialogOpen, setGrabDialogOpen] = useState(false);
-  const [designs, setDesigns] = useState<Array<{DesignCode: string, DesignName: string}>>([]);
-  const [categories, setCategories] = useState<Array<{CategoryCode: string, CategoryName: string}>>([]);
-  const [grabProducts, setGrabProducts] = useState<Array<{ID: number, ClientCode: string, CollectCode: string, DesignName: string, CategoryName: string, SizeName: string, Photo1?: string | null}>>([]);
-  const [selectedDesign, setSelectedDesign] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedGrabProduct, setSelectedGrabProduct] = useState<number | null>(null);
-  
-  // Filter states
-  const [filters, setFilters] = useState({
-    clientCode: '',
-    category: '',
-    department: '',
-    region: '',
-    status: 'all',
-    search: ''
-  });
-  
-  // Form states
-  const [formData, setFormData] = useState({
-    clientCode: '',
-    productId: 0,
-    department: '',
-    region: '',
-    quantityIn: 0,
-    isStockInSetComplete: false,
-    isLid: false,
-    isBody: false,
-    notes: '',
-    expirationYears: 2
-  });
-  
-  const [offerData, setOfferData] = useState({
-    stockEntryId: '',
-    clientId: '',
-    quantity: 0,
-    notes: '',
-    expiryDays: 7
-  });
 
-  const [grabFormData, setGrabFormData] = useState({
-    clientCode: '',
-    designCode: '',
-    productId: 0,
-    department: '',
-    region: '',
-    quantityIn: 0,
-    isStockInSetComplete: false,
-    isLid: false,
-    isBody: false,
-    notes: '',
-    expirationYears: 2
-  });
+  // Fetch warehouses
+  const fetchWarehouses = async () => {
+    try {
+      const response = await fetch('/api/stock/warehouses');
+      const result = await response.json();
+      if (result.success) {
+        setWarehouses(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching warehouses:', error);
+    }
+  };
 
-  const [submitting, setSubmitting] = useState(false);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    totalPages: 0
-  });
-
-  // Fetch stock entries
-  const fetchStockEntries = async () => {
+  // Fetch products
+  const fetchProducts = async (search?: string) => {
     try {
       const params = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value && value !== 'all') params.append(key, value);
-      });
-      params.append('page', pagination.page.toString());
-      params.append('limit', pagination.limit.toString());
+      if (search) params.append('search', search);
+      params.append('limit', '50');
+
+      const response = await fetch(`/api/stock/products?${params}`);
+      const result = await response.json();
+      if (result.success) {
+        setProducts(result.data.products);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    }
+  };
+
+  // Fetch stock data
+  const fetchStockData = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (warehouseFilter !== 'all') params.append('warehouseId', warehouseFilter);
 
       const response = await fetch(`/api/stock/enhanced?${params}`);
       const result = await response.json();
 
       if (result.success) {
-        setStockEntries(result.data.entries);
-        setPagination(result.data.pagination);
+        setStockData(result.data);
       } else {
-        toast.error(result.error || 'Failed to fetch stock entries');
-      }
-    } catch (error) {
-      console.error('Error fetching stock entries:', error);
-      toast.error('Failed to fetch stock entries');
-    }
-  };
-
-  // Fetch products for selection
-  const fetchProducts = async () => {
-    try {
-      const response = await fetch('/api/stock/products');
-      const result = await response.json();
-
-      if (result.success) {
-        setProducts(result.data.products);
-      } else {
-        toast.error(result.error || 'Failed to fetch products');
-      }
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      toast.error('Failed to fetch products');
-    }
-  };
-
-  // Fetch offers
-  const fetchOffers = async () => {
-    try {
-      const response = await fetch('/api/stock/offers');
-      const result = await response.json();
-
-      if (result.success) {
-        setOffers(result.data);
-      } else {
-        toast.error(result.error || 'Failed to fetch offers');
-      }
-    } catch (error) {
-      console.error('Error fetching offers:', error);
-      toast.error('Failed to fetch offers');
-    }
-  };
-
-  useEffect(() => {
-    fetchStockEntries();
-    fetchProducts();
-    fetchOffers();
-  }, [filters, pagination.page, pagination.limit]);
-
-  // Fetch designs for grab dropdown
-  const fetchDesigns = async () => {
-    try {
-      const response = await fetch('/api/stock/enhanced/grab?type=designs');
-      const result = await response.json();
-      if (result.success) {
-        setDesigns(result.data);
-      }
-    } catch (error) {
-      console.error('Error fetching designs:', error);
-    }
-  };
-
-  // Fetch categories based on selected design
-  const fetchCategories = async (designCode: string) => {
-    try {
-      const response = await fetch(`/api/stock/enhanced/grab?type=categories&designCode=${designCode}`);
-      const result = await response.json();
-      if (result.success) {
-        setCategories(result.data);
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
-
-  // Fetch products based on selected design
-  const fetchGrabProducts = async (designCode: string) => {
-    try {
-      const response = await fetch(`/api/stock/enhanced/grab?type=products&designCode=${designCode}`);
-      const result = await response.json();
-      if (result.success) {
-        setGrabProducts(result.data);
-      }
-    } catch (error) {
-      console.error('Error fetching products:', error);
-    }
-  };
-
-  // Handle design selection
-  const handleDesignChange = (designCode: string) => {
-    setSelectedDesign(designCode);
-    setGrabProducts([]);
-    setSelectedGrabProduct(null);
-    setGrabFormData(prev => ({ ...prev, designCode, productId: 0 }));
-    
-    if (designCode) {
-      fetchGrabProducts(designCode);
-    } else {
-      setGrabProducts([]);
-    }
-  };
-
-  // Handle product selection
-  const handleProductChange = (productId: number) => {
-    setSelectedGrabProduct(productId);
-    setGrabFormData(prev => ({ ...prev, productId }));
-    
-    const product = grabProducts.find(p => p.ID === productId);
-    if (product && product.ClientCode) {
-      setGrabFormData(prev => ({ ...prev, clientCode: product.ClientCode }));
-    }
-  };
-
-  // Create grab stock entry
-  const handleCreateGrabStock = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedDesign || !grabFormData.productId) {
-      toast.error('Please select both design and product');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const response = await fetch('/api/stock/enhanced/grab', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(grabFormData)
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success('Grab stock entry created successfully');
-        setGrabDialogOpen(false);
-        setGrabFormData({
-          clientCode: '',
-          designCode: '',
-          productId: 0,
-          department: '',
-          region: '',
-          quantityIn: 0,
-          isStockInSetComplete: false,
-          isLid: false,
-          isBody: false,
-          notes: '',
-          expirationYears: 2
+        toast({
+          title: 'Error',
+          description: result.error || 'Failed to fetch stock data',
+          variant: 'destructive'
         });
-        setSelectedDesign('');
-        setGrabProducts([]);
-        setSelectedGrabProduct(null);
-        fetchStockEntries();
-      } else {
-        toast.error(result.error || 'Failed to create grab stock entry');
       }
     } catch (error) {
-      console.error('Error creating grab stock entry:', error);
-      toast.error('Failed to create grab stock entry');
+      console.error('Error fetching stock:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch stock data',
+        variant: 'destructive'
+      });
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  // Initialize designs when grab dialog opens
   useEffect(() => {
-    if (grabDialogOpen) {
-      fetchDesigns();
-    }
-  }, [grabDialogOpen]);
+    fetchWarehouses();
+    fetchProducts();
+    fetchStockData();
+  }, [statusFilter, warehouseFilter]);
 
-  // Create stock entry
-  const handleCreateStock = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProduct) {
-      toast.error('Please select a product');
+  // Add incoming stock
+  const handleAddStock = async () => {
+    if (!incomingStock.productId || incomingStock.qty_in <= 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select a product and enter valid quantity',
+        variant: 'destructive'
+      });
       return;
     }
 
-    setSubmitting(true);
     try {
       const response = await fetch('/api/stock/enhanced', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          productId: selectedProduct.ID
-        })
+        body: JSON.stringify(incomingStock)
       });
 
       const result = await response.json();
 
       if (result.success) {
-        toast.success('Stock entry created successfully');
-        setCreateDialogOpen(false);
-        setFormData({
-          clientCode: '',
+        toast({
+          title: 'Success',
+          description: `Added ${incomingStock.qty_in} units to stock`
+        });
+        setIncomingStock({
           productId: 0,
-          department: '',
-          region: '',
-          quantityIn: 0,
-          isStockInSetComplete: false,
-          isLid: false,
-          isBody: false,
+          qty_in: 0,
+          isComplated_set: false,
+          isBody_only: false,
+          isLid_only: false,
+          expirationYears: 2,
+          warehouseId: '',
+          shelfId: '',
           notes: '',
-          expirationYears: 2
+          createdBy: 'current-user'
         });
         setSelectedProduct(null);
-        fetchStockEntries();
+        fetchStockData();
       } else {
-        toast.error(result.error || 'Failed to create stock entry');
-      }
-    } catch (error) {
-      console.error('Error creating stock entry:', error);
-      toast.error('Failed to create stock entry');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Create stock offer
-  const handleCreateOffer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    try {
-      const response = await fetch('/api/stock/offers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(offerData)
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success('Stock offer created successfully');
-        setOfferDialogOpen(false);
-        setOfferData({
-          stockEntryId: '',
-          clientId: '',
-          quantity: 0,
-          notes: '',
-          expiryDays: 7
+        toast({
+          title: 'Error',
+          description: result.error || 'Failed to add stock',
+          variant: 'destructive'
         });
-        fetchStockEntries();
-        fetchOffers();
-      } else {
-        toast.error(result.error || 'Failed to create stock offer');
       }
     } catch (error) {
-      console.error('Error creating stock offer:', error);
-      toast.error('Failed to create stock offer');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Update offer status
-  const handleUpdateOffer = async (offerId: string, status: 'approved' | 'rejected' | 'cancelled') => {
-    try {
-      const response = await fetch('/api/stock/offers', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ offerId, status })
+      console.error('Error adding stock:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add stock',
+        variant: 'destructive'
       });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success(`Offer ${status} successfully`);
-        fetchOffers();
-        fetchStockEntries();
-      } else {
-        toast.error(result.error || 'Failed to update offer');
-      }
-    } catch (error) {
-      console.error('Error updating offer:', error);
-      toast.error('Failed to update offer');
     }
   };
 
   // Get status badge
-  const getStatusBadge = (status: StockStatus) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case 'available':
         return <Badge className="bg-green-100 text-green-800">Available</Badge>;
@@ -483,740 +267,478 @@ export default function EnhancedStockManagement() {
     }
   };
 
-  // Get offer status badge
-  const getOfferStatusBadge = (status: OfferStatus) => {
+  // Get status icon
+  const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>;
-      case 'approved':
-        return <Badge className="bg-green-100 text-green-800">Approved</Badge>;
-      case 'rejected':
-        return <Badge className="bg-red-100 text-red-800">Rejected</Badge>;
-      case 'expired':
-        return <Badge className="bg-gray-100 text-gray-800">Expired</Badge>;
-      case 'cancelled':
-        return <Badge className="bg-gray-100 text-gray-800">Cancelled</Badge>;
+      case 'available':
+        return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'low_stock':
+        return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+      case 'out_of_stock':
+        return <XCircle className="h-4 w-4 text-red-600" />;
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Package className="h-4 w-4" />;
     }
-  };
-
-  // Check if stock is expiring soon
-  const isExpiringSoon = (expirationDate: string) => {
-    const expDate = new Date(expirationDate);
-    const today = new Date();
-    const daysUntilExpiry = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return daysUntilExpiry <= 30; // Expiring within 30 days
   };
 
   return (
     <div className="container mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Package className="h-8 w-8" />
-            Enhanced Stock Management
-          </h1>
-          <p className="text-muted-foreground">Manage stock with client selection and product integration</p>
+          <h1 className="text-3xl font-bold">Enhanced Stock Management</h1>
+          <p className="text-muted-foreground">
+            Manage product stock with warehouse tracking and expiration monitoring
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Stock Entry
-          </Button>
-          <Button variant="outline" onClick={() => setGrabDialogOpen(true)}>
-            <Package className="h-4 w-4 mr-2" />
-            Grab Stock Entry
-          </Button>
-        </div>
+        <Button onClick={() => setActiveTab('incoming')}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Stock
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Stock Overview</TabsTrigger>
-          <TabsTrigger value="offers">Stock Offers</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="incoming">Add Stock</TabsTrigger>
+          <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
           {/* Filters */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Filter className="h-5 w-5" />
-                Filters
-              </CardTitle>
+              <CardTitle>Stock Filters</CardTitle>
+              <CardDescription>Filter stock by status, warehouse, or search</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                <div>
-                  <Label>Search</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search stock..."
-                      value={filters.search}
-                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>Client Code</Label>
+            <CardContent className="flex gap-4">
+              <div className="flex-1">
+                <Label>Search</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Filter by client code"
-                    value={filters.clientCode}
-                    onChange={(e) => setFilters(prev => ({ ...prev, clientCode: e.target.value }))}
+                    placeholder="Search by product code, design, client..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
                   />
                 </div>
-                <div>
-                  <Label>Department</Label>
-                  <Input
-                    placeholder="Filter by department"
-                    value={filters.department}
-                    onChange={(e) => setFilters(prev => ({ ...prev, department: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label>Region</Label>
-                  <Input
-                    placeholder="Filter by region"
-                    value={filters.region}
-                    onChange={(e) => setFilters(prev => ({ ...prev, region: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <Select value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="available">Available</SelectItem>
-                      <SelectItem value="low_stock">Low Stock</SelectItem>
-                      <SelectItem value="out_of_stock">Out of Stock</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-end">
-                  <Button onClick={fetchStockEntries} variant="outline">
-                    Apply Filters
-                  </Button>
-                </div>
+              </div>
+              <div className="flex-1">
+                <Label>Status</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="available">Available</SelectItem>
+                    <SelectItem value="low_stock">Low Stock</SelectItem>
+                    <SelectItem value="out_of_stock">Out of Stock</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1">
+                <Label>Warehouse</Label>
+                <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Warehouses</SelectItem>
+                    {warehouses.map((warehouse) => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name} ({warehouse.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <Button variant="outline" onClick={fetchStockData}>
+                  Refresh
+                </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Stock Entries Table */}
+          {/* Stock Overview Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Stock Entries</CardTitle>
+              <CardTitle>Stock Overview</CardTitle>
               <CardDescription>
-                Current stock levels with product information
+                Current stock levels with warehouse and expiration tracking
               </CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                  <p className="text-muted-foreground mt-2">Loading stock data...</p>
+                  <Package className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p>Loading stock data...</p>
                 </div>
-              ) : stockEntries.length === 0 ? (
+              ) : stockData.length === 0 ? (
                 <div className="text-center py-8">
-                  <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No stock entries found</p>
+                  <Package className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <p>No stock data found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Client Code</TableHead>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Department</TableHead>
-                        <TableHead>Region</TableHead>
-                        <TableHead>Available</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Expiration</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {stockEntries.map((entry) => (
-                        <TableRow key={entry.id}>
-                          <TableCell className="font-medium">{entry.clientCode}</TableCell>
-                          <TableCell>
-                            {entry.product ? (
-                              <div className="text-sm">
-                                <div className="font-medium">{entry.product.DesignName}</div>
-                                <div className="text-muted-foreground">{entry.product.CategoryName}</div>
-                                {entry.product.Photo1 && (
-                                  <img 
-                                    src={entry.product.Photo1} 
-                                    alt="Product" 
-                                    className="w-8 h-8 object-cover rounded mt-1"
-                                  />
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground">No product info</span>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Warehouse</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Available</TableHead>
+                      <TableHead>Reserved</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Expiration</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stockData
+                      .filter(stock => 
+                        searchTerm === '' || 
+                        stock.designCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        stock.clientCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (stock.product?.CollectCode?.toLowerCase().includes(searchTerm.toLowerCase()))
+                      )
+                      .map((stock) => (
+                      <TableRow key={stock.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            {stock.product?.Photo1 && (
+                              <img 
+                                src={stock.product.Photo1} 
+                                alt={stock.product.CollectCode}
+                                className="h-10 w-10 rounded object-cover"
+                              />
                             )}
-                          </TableCell>
-                          <TableCell>{entry.department || '-'}</TableCell>
-                          <TableCell>{entry.region || '-'}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{entry.availableQuantity}</span>
-                              {entry.totalOffered > 0 && (
-                                <Badge variant="secondary" className="text-xs">
-                                  {entry.totalOffered} offered
+                            <div>
+                              <div className="font-medium">{stock.product?.CollectCode}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {stock.product?.DesignName} - {stock.product?.NameDesc}
+                              </div>
+                              {stock.isExpiringSoon && (
+                                <Badge variant="destructive" className="text-xs mt-1">
+                                  Expiring Soon
                                 </Badge>
                               )}
                             </div>
-                          </TableCell>
-                          <TableCell className="font-medium">{entry.quantityIn}</TableCell>
-                          <TableCell>{getStatusBadge(entry.status)}</TableCell>
-                          <TableCell>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {stock.warehouse ? (
+                            <div className="flex items-center gap-2">
+                              <Warehouse className="h-4 w-4" />
+                              <span>{stock.warehouse.name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">Unassigned</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {stock.shelf ? (
+                            <div className="text-sm">
+                              {stock.shelf.code}
+                              {stock.shelf.row && ` - Row ${stock.shelf.row}`}
+                              {stock.shelf.column && ` - Col ${stock.shelf.column}`}
+                              {stock.shelf.level && ` - Level ${stock.shelf.level}`}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">Unassigned</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium">{stock.availableQuantity}</TableCell>
+                        <TableCell>{stock.qty_offer}</TableCell>
+                        <TableCell className="font-medium">{stock.total}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {getStatusIcon(stock.status)}
+                            {getStatusBadge(stock.status)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {stock.expirationDate ? (
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4" />
                               <span className="text-sm">
-                                {new Date(entry.expirationDate).toLocaleDateString()}
+                                {new Date(stock.expirationDate).toLocaleDateString()}
                               </span>
-                              {isExpiringSoon(entry.expirationDate) && (
-                                <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                              )}
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
+                          ) : (
+                            <span className="text-muted-foreground">No expiration</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Dialog>
+                            <DialogTrigger asChild>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setSelectedStock(entry)}
+                                onClick={() => setSelectedStock(stock)}
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  setOfferData({
-                                    stockEntryId: entry.id,
-                                    clientId: '',
-                                    quantity: Math.min(entry.availableQuantity, 1),
-                                    notes: '',
-                                    expiryDays: 7
-                                  });
-                                  setOfferDialogOpen(true);
-                                }}
-                                disabled={entry.availableQuantity === 0}
-                              >
-                                <TrendingUp className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-4xl">
+                              <DialogHeader>
+                                <DialogTitle>
+                                  Stock Details - {stock.product?.CollectCode}
+                                </DialogTitle>
+                                <DialogDescription>
+                                  Detailed information for this stock item
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="grid grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                  <div>
+                                    <Label>Product Information</Label>
+                                    <div className="mt-2 space-y-2">
+                                      <div><strong>Collect Code:</strong> {stock.product?.CollectCode}</div>
+                                      <div><strong>Design:</strong> {stock.product?.DesignName}</div>
+                                      <div><strong>Name:</strong> {stock.product?.NameDesc}</div>
+                                      <div><strong>Category:</strong> {stock.product?.CategoryName}</div>
+                                      <div><strong>Size:</strong> {stock.product?.SizeName}</div>
+                                      <div><strong>Color:</strong> {stock.product?.ColorName}</div>
+                                      <div><strong>Material:</strong> {stock.product?.MaterialName}</div>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <Label>Stock Properties</Label>
+                                    <div className="mt-2 space-y-2">
+                                      <div><strong>Complete Set:</strong> {stock.isComplated_set ? 'Yes' : 'No'}</div>
+                                      <div><strong>Body Only:</strong> {stock.isBody_only ? 'Yes' : 'No'}</div>
+                                      <div><strong>Lid Only:</strong> {stock.isLid_only ? 'Yes' : 'No'}</div>
+                                      <div><strong>Expiration Years:</strong> {stock.expirationYears}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="space-y-4">
+                                  <div>
+                                    <Label>Location</Label>
+                                    <div className="mt-2 space-y-2">
+                                      <div><strong>Warehouse:</strong> {stock.warehouse?.name || 'Unassigned'}</div>
+                                      <div><strong>Shelf:</strong> {stock.shelf?.code || 'Unassigned'}</div>
+                                      {stock.shelf?.row && <div><strong>Row:</strong> {stock.shelf.row}</div>}
+                                      {stock.shelf?.column && <div><strong>Column:</strong> {stock.shelf.column}</div>}
+                                      {stock.shelf?.level && <div><strong>Level:</strong> {stock.shelf.level}</div>}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <Label>Quantities</Label>
+                                    <div className="mt-2 space-y-2">
+                                      <div><strong>Total In:</strong> {stock.qty_in}</div>
+                                      <div><strong>Reserved:</strong> {stock.qty_offer}</div>
+                                      <div><strong>Available:</strong> {stock.availableQuantity}</div>
+                                    </div>
+                                  </div>
+                                  {stock.notes && (
+                                    <div>
+                                      <Label>Notes</Label>
+                                      <p className="mt-2 text-sm">{stock.notes}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="offers" className="space-y-6">
+        <TabsContent value="incoming" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Stock Offers</CardTitle>
+              <CardTitle>Add Incoming Stock</CardTitle>
               <CardDescription>
-                Manage and track stock offers to clients
+                Add new stock with warehouse and expiration tracking
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label htmlFor="product">Select Product</Label>
+                  <Select
+                    value={selectedProduct?.ID?.toString() || ''}
+                    onValueChange={(value) => {
+                      const product = products.find(p => p.ID === parseInt(value));
+                      setSelectedProduct(product || null);
+                      if (product) {
+                        setIncomingStock(prev => ({ ...prev, productId: product.ID }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Search and select a product..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {products.map((product) => (
+                        <SelectItem key={product.ID} value={product.ID.toString()}>
+                          {product.CollectCode} - {product.DesignName} - {product.NameDesc}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="quantity">Quantity</Label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    min="1"
+                    value={incomingStock.qty_in || ''}
+                    onChange={(e) => setIncomingStock(prev => ({ ...prev, qty_in: parseInt(e.target.value) || 0 }))}
+                    placeholder="Enter quantity"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="warehouse">Warehouse</Label>
+                  <Select
+                    value={incomingStock.warehouseId || ''}
+                    onValueChange={(value) => setIncomingStock(prev => ({ ...prev, warehouseId: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select warehouse..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouses.map((warehouse) => (
+                        <SelectItem key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name} ({warehouse.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="expiration">Expiration Years</Label>
+                  <Select
+                    value={incomingStock.expirationYears?.toString() || '2'}
+                    onValueChange={(value) => setIncomingStock(prev => ({ ...prev, expirationYears: parseInt(value) }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">2 Years</SelectItem>
+                      <SelectItem value="5">5 Years</SelectItem>
+                      <SelectItem value="10">10 Years</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="complete-set"
+                      checked={incomingStock.isComplated_set}
+                      onCheckedChange={(checked) => setIncomingStock(prev => ({ ...prev, isComplated_set: checked as boolean }))}
+                    />
+                    <Label htmlFor="complete-set">Complete Set</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="body-only"
+                      checked={incomingStock.isBody_only}
+                      onCheckedChange={(checked) => setIncomingStock(prev => ({ ...prev, isBody_only: checked as boolean }))}
+                    />
+                    <Label htmlFor="body-only">Body Only</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="lid-only"
+                      checked={incomingStock.isLid_only}
+                      onCheckedChange={(checked) => setIncomingStock(prev => ({ ...prev, isLid_only: checked as boolean }))}
+                    />
+                    <Label htmlFor="lid-only">Lid Only</Label>
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    value={incomingStock.notes || ''}
+                    onChange={(e) => setIncomingStock(prev => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Enter any notes about this stock entry..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+              
+              <Button onClick={handleAddStock} className="w-full" disabled={!selectedProduct}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Stock
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="warehouses" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Warehouse Management</CardTitle>
+              <CardDescription>
+                View and manage warehouse locations
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {offers.length === 0 ? (
-                <div className="text-center py-8">
-                  <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No stock offers found</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Client</TableHead>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Offer Date</TableHead>
-                        <TableHead>Expiry Date</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {offers.map((offer) => (
-                        <TableRow key={offer.id}>
-                          <TableCell className="font-medium">{offer.clientId}</TableCell>
-                          <TableCell>
-                            {offer.stockEntry?.product ? (
-                              <div className="text-sm">
-                                <div className="font-medium">{offer.stockEntry.product.DesignName}</div>
-                                <div className="text-muted-foreground">{offer.stockEntry.product.CategoryName}</div>
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground">No product info</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="font-medium">{offer.quantity}</TableCell>
-                          <TableCell>{getOfferStatusBadge(offer.status)}</TableCell>
-                          <TableCell>
-                            {new Date(offer.offerDate).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              <span className="text-sm">
-                                {new Date(offer.expiryDate).toLocaleDateString()}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {offer.status === 'pending' && (
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleUpdateOffer(offer.id, 'approved')}
-                                >
-                                  <CheckCircle className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleUpdateOffer(offer.id, 'rejected')}
-                                >
-                                  <XCircle className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {warehouses.map((warehouse) => (
+                  <Card key={warehouse.id}>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">{warehouse.name}</CardTitle>
+                      <CardDescription>{warehouse.code}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div><strong>Location:</strong> {warehouse.location || 'Not specified'}</div>
+                        <div><strong>Stock Items:</strong> {warehouse._count.stocks}</div>
+                        <div><strong>Shelves:</strong> {warehouse.shelves.length}</div>
+                        {warehouse.description && (
+                          <div className="text-sm text-muted-foreground">{warehouse.description}</div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="analytics" className="space-y-6">
+        <TabsContent value="notifications" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Stock Analytics</CardTitle>
+              <CardTitle>Stock Notifications</CardTitle>
               <CardDescription>
-                Insights and reports about stock levels and movements
+                Expiration warnings and stock alerts
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-center py-8">
-                <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">Analytics coming soon...</p>
+                <Bell className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                <p>Stock notifications will appear here</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  System will notify you about expiring stock and low inventory levels
+                </p>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Create Stock Entry Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Create Stock Entry</DialogTitle>
-            <DialogDescription>
-              Add new stock entry with product selection and detailed information
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleCreateStock} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Client Code</Label>
-                <Input
-                  value={formData.clientCode}
-                  onChange={(e) => setFormData(prev => ({ ...prev, clientCode: e.target.value }))}
-                  placeholder="Enter client code"
-                  required
-                />
-              </div>
-              <div>
-                <Label>Product</Label>
-                <Select onValueChange={(value) => {
-                  const product = products.find(p => p.ID === parseInt(value));
-                  setSelectedProduct(product || null);
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a product" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {products.map((product) => (
-                      <SelectItem key={product.ID} value={product.ID.toString()}>
-                        {product.DesignName} - {product.CategoryName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Department</Label>
-                <Input
-                  value={formData.department}
-                  onChange={(e) => setFormData(prev => ({ ...prev, department: e.target.value }))}
-                  placeholder="Enter department"
-                />
-              </div>
-              <div>
-                <Label>Region</Label>
-                <Input
-                  value={formData.region}
-                  onChange={(e) => setFormData(prev => ({ ...prev, region: e.target.value }))}
-                  placeholder="Enter region"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Quantity</Label>
-                <Input
-                  type="number"
-                  value={formData.quantityIn}
-                  onChange={(e) => setFormData(prev => ({ ...prev, quantityIn: parseInt(e.target.value) || 0 }))}
-                  placeholder="Enter quantity"
-                  min="1"
-                  required
-                />
-              </div>
-              <div>
-                <Label>Expiration Years</Label>
-                <Select value={formData.expirationYears.toString()} onValueChange={(value) => setFormData(prev => ({ ...prev, expirationYears: parseInt(value) }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2">2 Years</SelectItem>
-                    <SelectItem value="5">5 Years</SelectItem>
-                    <SelectItem value="10">10 Years</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="isStockInSetComplete"
-                  checked={formData.isStockInSetComplete}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isStockInSetComplete: checked as boolean }))}
-                />
-                <Label htmlFor="isStockInSetComplete">Set Complete</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="isLid"
-                  checked={formData.isLid}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isLid: checked as boolean }))}
-                />
-                <Label htmlFor="isLid">Includes Lid</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="isBody"
-                  checked={formData.isBody}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isBody: checked as boolean }))}
-                />
-                <Label htmlFor="isBody">Includes Body</Label>
-              </div>
-            </div>
-
-            <div>
-              <Label>Notes</Label>
-              <Textarea
-                value={formData.notes}
-                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="Enter any additional notes"
-                rows={3}
-              />
-            </div>
-
-            {selectedProduct && (
-              <Alert>
-                <Package className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Selected Product:</strong> {selectedProduct.DesignName} - {selectedProduct.CategoryName}
-                  {selectedProduct.Photo1 && (
-                    <img 
-                      src={selectedProduct.Photo1} 
-                      alt="Product" 
-                      className="w-16 h-16 object-cover rounded mt-2"
-                    />
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="flex gap-2">
-              <Button type="submit" disabled={submitting || !selectedProduct} className="flex-1">
-                {submitting ? 'Creating...' : 'Create Stock Entry'}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)} className="flex-1">
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Offer Dialog */}
-      <Dialog open={offerDialogOpen} onOpenChange={setOfferDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create Stock Offer</DialogTitle>
-            <DialogDescription>
-              Offer stock to a client with specified quantity and expiry
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleCreateOffer} className="space-y-4">
-            <div>
-              <Label>Client ID</Label>
-              <Input
-                value={offerData.clientId}
-                onChange={(e) => setOfferData(prev => ({ ...prev, clientId: e.target.value }))}
-                placeholder="Enter client ID"
-                required
-              />
-            </div>
-            <div>
-              <Label>Quantity</Label>
-              <Input
-                type="number"
-                value={offerData.quantity}
-                onChange={(e) => setOfferData(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
-                placeholder="Enter quantity"
-                min="1"
-                required
-              />
-            </div>
-            <div>
-              <Label>Expiry Days</Label>
-              <Select value={offerData.expiryDays.toString()} onValueChange={(value) => setOfferData(prev => ({ ...prev, expiryDays: parseInt(value) }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1 Day</SelectItem>
-                  <SelectItem value="3">3 Days</SelectItem>
-                  <SelectItem value="7">7 Days</SelectItem>
-                  <SelectItem value="14">14 Days</SelectItem>
-                  <SelectItem value="30">30 Days</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Notes</Label>
-              <Textarea
-                value={offerData.notes}
-                onChange={(e) => setOfferData(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="Enter any notes for this offer"
-                rows={3}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button type="submit" disabled={submitting} className="flex-1">
-                {submitting ? 'Creating...' : 'Create Offer'}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setOfferDialogOpen(false)} className="flex-1">
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Grab Stock Entry Dialog */}
-      <Dialog open={grabDialogOpen} onOpenChange={setGrabDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Grab Stock Entry</DialogTitle>
-            <DialogDescription>
-              Add new stock entry with cascading design and category selection
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleCreateGrabStock} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Client Code</Label>
-                <Input
-                  value={grabFormData.clientCode}
-                  onChange={(e) => setGrabFormData(prev => ({ ...prev, clientCode: e.target.value }))}
-                  placeholder="Enter client code"
-                  required
-                />
-              </div>
-              <div>
-                <Label>Design Name</Label>
-                <Select onValueChange={handleDesignChange} value={selectedDesign}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a design" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {designs.map((design) => (
-                      <SelectItem key={design.DesignCode} value={design.DesignCode}>
-                        {design.DesignName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
-            <div>
-              <Label>Available Products</Label>
-              <Select
-                onValueChange={(value) => handleProductChange(parseInt(value))}
-                value={selectedGrabProduct?.toString() || ''}
-                disabled={!selectedDesign}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a product" />
-                </SelectTrigger>
-                <SelectContent>
-                  {grabProducts.map((product) => (
-                    <SelectItem key={product.ID} value={product.ID.toString()}>
-                      {product.CollectCode} - {product.DesignName} - {product.CategoryName} {product.SizeName && `- ${product.SizeName}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Department</Label>
-                <Input
-                  value={grabFormData.department}
-                  onChange={(e) => setGrabFormData(prev => ({ ...prev, department: e.target.value }))}
-                  placeholder="Enter department"
-                />
-              </div>
-              <div>
-                <Label>Region</Label>
-                <Input
-                  value={grabFormData.region}
-                  onChange={(e) => setGrabFormData(prev => ({ ...prev, region: e.target.value }))}
-                  placeholder="Enter region"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Quantity</Label>
-                <Input
-                  type="number"
-                  value={grabFormData.quantityIn}
-                  onChange={(e) => setGrabFormData(prev => ({ ...prev, quantityIn: parseInt(e.target.value) || 0 }))}
-                  placeholder="Enter quantity"
-                  min="1"
-                  required
-                />
-              </div>
-              <div>
-                <Label>Expiration Years</Label>
-                <Select value={grabFormData.expirationYears.toString()} onValueChange={(value) => setGrabFormData(prev => ({ ...prev, expirationYears: parseInt(value) }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2">2 Years</SelectItem>
-                    <SelectItem value="5">5 Years</SelectItem>
-                    <SelectItem value="10">10 Years</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="grabIsStockInSetComplete"
-                  checked={grabFormData.isStockInSetComplete}
-                  onCheckedChange={(checked) => setGrabFormData(prev => ({ ...prev, isStockInSetComplete: checked as boolean }))}
-                />
-                <Label htmlFor="grabIsStockInSetComplete">Set Complete</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="grabIsLid"
-                  checked={grabFormData.isLid}
-                  onCheckedChange={(checked) => setGrabFormData(prev => ({ ...prev, isLid: checked as boolean }))}
-                />
-                <Label htmlFor="grabIsLid">Includes Lid</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="grabIsBody"
-                  checked={grabFormData.isBody}
-                  onCheckedChange={(checked) => setGrabFormData(prev => ({ ...prev, isBody: checked as boolean }))}
-                />
-                <Label htmlFor="grabIsBody">Includes Body</Label>
-              </div>
-            </div>
-
-            <div>
-              <Label>Notes</Label>
-              <Textarea
-                value={grabFormData.notes}
-                onChange={(e) => setGrabFormData(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="Enter any additional notes"
-                rows={3}
-              />
-            </div>
-
-            {selectedDesign && selectedGrabProduct && (
-              <Alert>
-                <Package className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Selected Design:</strong> {designs.find(d => d.DesignCode === selectedDesign)?.DesignName}
-                  {selectedGrabProduct && (
-                    <div className="mt-2">
-                      <strong>Selected Product:</strong> {grabProducts.find(p => p.ID === selectedGrabProduct)?.CollectCode}
-                      {grabProducts.find(p => p.ID === selectedGrabProduct)?.Photo1 && (
-                        <img
-                          src={grabProducts.find(p => p.ID === selectedGrabProduct)?.Photo1}
-                          alt="Product"
-                          className="w-16 h-16 object-cover rounded mt-2"
-                        />
-                      )}
-                    </div>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="flex gap-2">
-              <Button type="submit" disabled={submitting || !selectedDesign || !grabFormData.productId} className="flex-1">
-                {submitting ? 'Creating...' : 'Create Grab Stock Entry'}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setGrabDialogOpen(false)} className="flex-1">
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

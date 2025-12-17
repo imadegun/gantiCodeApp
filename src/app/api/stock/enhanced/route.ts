@@ -1,296 +1,233 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { query } from '@/lib/mysql'
-import { verifyToken, canAccessStock } from '@/lib/auth'
-import { z } from 'zod'
+import { NextRequest, NextResponse } from 'next/server';
+import { PrismaClient, StockStatus } from '@prisma/client';
+import { query } from '@/lib/mysql';
 
-const createStockSchema = z.object({
-  clientCode: z.string().min(1, 'Client code is required'),
-  productId: z.number().int().positive('Product ID is required'),
-  department: z.string().optional(),
-  region: z.string().optional(),
-  quantityIn: z.number().int().positive('Quantity must be positive'),
-  isStockInSetComplete: z.boolean().default(false),
-  isLid: z.boolean().default(false),
-  isBody: z.boolean().default(false),
-  notes: z.string().optional(),
-  expirationYears: z.number().int().min(1).max(10).default(2)
-})
+const prisma = new PrismaClient();
 
-const searchParamsSchema = z.object({
-  page: z.string().transform(Number).default(1),
-  limit: z.string().transform(Number).default(20),
-  clientCode: z.string().optional(),
-  category: z.string().optional(),
-  department: z.string().optional(),
-  region: z.string().optional(),
-  status: z.string().optional(),
-  search: z.string().optional()
-})
-
-// GET /api/stock/enhanced - Get stock entries with filtering and pagination
+// GET /api/stock/enhanced - Get enhanced stock data with product info
 export async function GET(request: NextRequest) {
   try {
-    // Verify authentication and authorization
-    const token = request.cookies.get('auth-token')?.value
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      )
+    const { searchParams } = new URL(request.url);
+    const warehouseId = searchParams.get('warehouseId');
+    const status = searchParams.get('status') as StockStatus | null;
+    const expiring = searchParams.get('expiring'); // Get expiring stock (days)
+
+    let whereClause: any = {};
+    
+    if (warehouseId) whereClause.warehouseId = warehouseId;
+    if (status) whereClause.status = status;
+    
+    // Handle expiring stock filter
+    if (expiring) {
+      const daysFromNow = parseInt(expiring);
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + daysFromNow);
+      
+      whereClause.expirationDate = {
+        lte: futureDate
+      };
     }
 
-    const decoded = verifyToken(token)
-    if (!decoded) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      )
-    }
-
-    const user = await db.user.findUnique({
-      where: { id: decoded.id },
-      select: { role: true }
-    })
-
-    if (!user || !canAccessStock(user.role)) {
-      return NextResponse.json(
-        { success: false, error: 'Stock access required' },
-        { status: 403 }
-      )
-    }
-
-    // Parse query parameters
-    const { searchParams } = new URL(request.url)
-    const params = searchParamsSchema.parse(Object.fromEntries(searchParams))
-
-    // Build where clause
-    const where: any = {}
-
-    if (params.clientCode) {
-      where.clientCode = { contains: params.clientCode, mode: 'insensitive' }
-    }
-    if (params.department) {
-      where.department = { contains: params.department, mode: 'insensitive' }
-    }
-    if (params.region) {
-      where.region = { contains: params.region, mode: 'insensitive' }
-    }
-    if (params.status) {
-      where.status = params.status
-    }
-
-    // Search across multiple fields
-    if (params.search) {
-      where.OR = [
-        { clientCode: { contains: params.search, mode: 'insensitive' } },
-        { notes: { contains: params.search, mode: 'insensitive' } }
-      ]
-    }
-
-    // Get stock entries with pagination
-    const [stockEntries, total] = await Promise.all([
-      db.stockEntry.findMany({
-        where,
-        include: {
-          creator: {
-            select: {
-              id: true,
-              username: true,
-              name: true
-            }
-          },
-          offers: {
-            where: { status: 'pending' },
-            select: {
-              id: true,
-              quantity: true,
-              clientId: true,
-              status: true,
-              expiryDate: true
-            }
+    const stocks = await prisma.stock.findMany({
+      where: whereClause,
+      include: {
+        warehouse: {
+          select: {
+            id: true,
+            name: true,
+            code: true
           }
         },
-        orderBy: { createdAt: 'desc' },
-        skip: (params.page - 1) * params.limit,
-        take: params.limit
-      }),
-      db.stockEntry.count({ where })
-    ])
-
-    // Get product information for each stock entry
-    const stockEntriesWithProducts = await Promise.all(
-      stockEntries.map(async (entry) => {
-        const productRows = await query(
-          `SELECT m.ID, m.CollectCode, m.ClientCode, m.DesignCode, m.NameCode, 
-           m.CategoryCode, m.SizeCode, m.Photo1, m.Photo2, 
-           d.DesignName, c.CategoryName, s.SizeName
-           FROM tblcollect_master m
-           LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
-           LEFT JOIN tblcollect_category c ON m.CategoryCode = c.CategoryCode
-           LEFT JOIN tblcollect_size s ON m.SizeCode = s.SizeCode
-           WHERE m.ID = ?`,
-          [entry.productId]
-        ) as any[]
-
-        const product = productRows && productRows.length > 0 ? productRows[0] : null
-
-        return {
-          ...entry,
-          product,
-          totalOffered: entry.offers.reduce((sum, offer) => sum + offer.quantity, 0),
-          availableQuantity: entry.quantityIn - entry.offers.reduce((sum, offer) => sum + offer.quantity, 0)
-        }
-      })
-    )
-
-    // Get unique values for filters
-    const [clients, departments, regions] = await Promise.all([
-      db.stockEntry.findMany({
-        select: { clientCode: true },
-        distinct: ['clientCode'],
-        orderBy: { clientCode: 'asc' }
-      }),
-      db.stockEntry.findMany({
-        where: { department: { not: null } },
-        select: { department: true },
-        distinct: ['department'],
-        orderBy: { department: 'asc' }
-      }),
-      db.stockEntry.findMany({
-        where: { region: { not: null } },
-        select: { region: true },
-        distinct: ['region'],
-        orderBy: { region: 'asc' }
-      })
-    ])
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        entries: stockEntriesWithProducts,
-        pagination: {
-          page: params.page,
-          limit: params.limit,
-          total,
-          totalPages: Math.ceil(total / params.limit)
+        shelf: {
+          select: {
+            id: true,
+            code: true,
+            row: true,
+            column: true,
+            level: true
+          }
         },
-        filters: {
-          clients: clients.map(c => c.clientCode),
-          departments: departments.map(d => d.department).filter(Boolean),
-          regions: regions.map(r => r.region).filter(Boolean)
+        creator: {
+          select: {
+            id: true,
+            name: true,
+            username: true
+          }
+        },
+        _count: {
+          select: {
+            offers: {
+              where: { status: 'pending' }
+            }
+          }
         }
-      }
-    })
+      },
+      orderBy: [
+        { warehouse: { name: 'asc' } },
+        { createdAt: 'desc' }
+      ]
+    });
 
+    // Enrich with MySQL product data
+    const enrichedStocks = await Promise.all(
+      stocks.map(async (stock) => {
+        try {
+          // Get product details from MySQL
+          const productRows = await query(
+            `SELECT m.ID, m.CollectCode, m.DesignCode, m.NameCode, m.CategoryCode, 
+                    m.SizeCode, m.ColorCode, m.TextureCode, m.MaterialCode, m.Photo1,
+                    d.DesignName, n.NameDesc, c.CategoryName, co.ColorName, 
+                    t.TextureName, s.SizeName, ma.MaterialName
+             FROM tblcollect_master m
+             LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
+             LEFT JOIN tblcollect_name n ON m.NameCode = n.NameCode
+             LEFT JOIN tblcollect_category c ON m.CategoryCode = c.CategoryCode
+             LEFT JOIN tblcollect_color co ON m.ColorCode = co.ColorCode
+             LEFT JOIN tblcollect_texture t ON m.TextureCode = t.TextureCode
+             LEFT JOIN tblcollect_size s ON m.SizeCode = s.SizeCode
+             LEFT JOIN tblcollect_material ma ON m.MaterialCode = ma.MaterialCode
+             WHERE m.ID = ?`,
+            [stock.productId]
+          ) as any[];
+
+          const product = productRows && productRows.length > 0 ? productRows[0] : null;
+
+          return {
+            ...stock,
+            product,
+            // Calculate available quantity
+            availableQuantity: stock.qty_in - stock.qty_offer,
+            // Check if stock is expiring soon
+            isExpiringSoon: stock.expirationDate ? 
+              new Date(stock.expirationDate) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : false
+          };
+        } catch (error) {
+          console.error('Error enriching stock data:', error);
+          return {
+            ...stock,
+            product: null,
+            availableQuantity: stock.qty_in - stock.qty_offer,
+            isExpiringSoon: false
+          };
+        }
+      })
+    );
+
+    return NextResponse.json({ success: true, data: enrichedStocks });
   } catch (error) {
-    console.error('Get enhanced stock error:', error)
+    console.error('Error fetching enhanced stock data:', error);
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: 'Failed to fetch stock data' },
       { status: 500 }
-    )
+    );
   }
 }
 
 // POST /api/stock/enhanced - Create new stock entry
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication and authorization
-    const token = request.cookies.get('auth-token')?.value
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
+    const body = await request.json();
+    const { 
+      productId, 
+      qty_in, 
+      isComplated_set, 
+      isBody_only, 
+      isLid_only,
+      expirationYears,
+      warehouseId,
+      shelfId,
+      notes,
+      createdBy
+    } = body;
 
-    const decoded = verifyToken(token)
-    if (!decoded) {
+    if (!productId || !qty_in || !createdBy) {
       return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      )
-    }
-
-    const user = await db.user.findUnique({
-      where: { id: decoded.id },
-      select: { role: true }
-    })
-
-    if (!user || !canAccessStock(user.role)) {
-      return NextResponse.json(
-        { success: false, error: 'Stock access required' },
-        { status: 403 }
-      )
-    }
-
-    // Validate input
-    const body = await request.json()
-    const validation = createStockSchema.safeParse(body)
-    
-    if (!validation.success) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid input',
-          details: validation.error.issues 
-        },
+        { success: false, error: 'Product ID, quantity, and created by are required' },
         { status: 400 }
-      )
+      );
     }
 
-    const data = validation.data
-
-    // Calculate expiration date
-    const expirationDate = new Date()
-    expirationDate.setFullYear(expirationDate.getFullYear() + data.expirationYears)
-
-    // Get design code from product
+    // Get product details from MySQL
     const productRows = await query(
-      'SELECT DesignCode FROM tblcollect_master WHERE ID = ?',
-      [data.productId]
-    ) as any[]
+      `SELECT DesignCode, ClientCode, NameCode, CategoryCode, SizeCode, 
+              ColorCode, TextureCode, MaterialCode, Photo1
+       FROM tblcollect_master WHERE ID = ?`,
+      [productId]
+    ) as any[];
 
     if (!productRows || productRows.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Product not found' },
+        { success: false, error: 'Product not found in database' },
         { status: 404 }
-      )
+      );
     }
 
-    const designCode = productRows[0].DesignCode
+    const product = productRows[0];
+
+    // Calculate expiration date
+    let expirationDate = null;
+    if (expirationYears && expirationYears > 0) {
+      expirationDate = new Date();
+      expirationDate.setFullYear(expirationDate.getFullYear() + expirationYears);
+    }
 
     // Create stock entry
-    const stockEntry = await db.stockEntry.create({
+    const stock = await prisma.stock.create({
       data: {
-        ...data,
-        designCode,
+        productId,
+        designCode: product.DesignCode,
+        clientCode: product.ClientCode,
+        nameCode: product.NameCode,
+        categoryCode: product.CategoryCode,
+        sizeCode: product.SizeCode,
+        colorCode: product.ColorCode,
+        textureCode: product.TextureCode,
+        materialCode: product.MaterialCode,
+        photo1: product.Photo1,
+        qty_in,
+        total: qty_in,
+        availableQuantity: qty_in,
+        isComplated_set: isComplated_set || false,
+        isBody_only: isBody_only || false,
+        isLid_only: isLid_only || false,
+        expirationYears: expirationYears || 2,
         expirationDate,
-        createdBy: decoded.id,
+        warehouseId,
+        shelfId,
+        notes,
+        createdBy,
         status: 'available'
       },
       include: {
-        creator: {
+        warehouse: {
           select: {
             id: true,
-            username: true,
-            name: true
+            name: true,
+            code: true
+          }
+        },
+        shelf: {
+          select: {
+            id: true,
+            code: true,
+            row: true,
+            column: true,
+            level: true
           }
         }
       }
-    })
+    });
 
     return NextResponse.json({
       success: true,
-      data: stockEntry,
+      data: { ...stock, product },
       message: 'Stock entry created successfully'
-    })
-
+    });
   } catch (error) {
-    console.error('Create stock entry error:', error)
+    console.error('Error creating stock entry:', error);
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: 'Failed to create stock entry' },
       { status: 500 }
-    )
+    );
   }
 }

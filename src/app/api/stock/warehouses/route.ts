@@ -79,3 +79,107 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// PUT /api/stock/warehouses/[id] - Update warehouse
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, name, code, location, description, isActive } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'Warehouse ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Check if updating code and if it conflicts with another warehouse
+    if (code) {
+      const existingWarehouse = await prisma.warehouse.findFirst({
+        where: {
+          code,
+          id: { not: id }
+        }
+      });
+
+      if (existingWarehouse) {
+        return NextResponse.json(
+          { success: false, error: 'Warehouse code already exists' },
+          { status: 409 }
+        );
+      }
+    }
+
+    const warehouse = await prisma.warehouse.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(code && { code }),
+        ...(location !== undefined && { location }),
+        ...(description !== undefined && { description }),
+        ...(isActive !== undefined && { isActive })
+      }
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: warehouse,
+      message: 'Warehouse updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating warehouse:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to update warehouse' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/stock/warehouses/[id] - Delete warehouse (soft delete)
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'Warehouse ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Check if warehouse has active stock
+    const warehouseWithStocks = await prisma.warehouse.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { stocks: true }
+        }
+      }
+    });
+
+    if (warehouseWithStocks && warehouseWithStocks._count.stocks > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Cannot delete warehouse with active stock. Move or delete stock first.' },
+        { status: 409 }
+      );
+    }
+
+    // Soft delete by setting isActive to false
+    const warehouse = await prisma.warehouse.update({
+      where: { id },
+      data: { isActive: false }
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Warehouse deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting warehouse:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to delete warehouse' },
+      { status: 500 }
+    );
+  }
+}

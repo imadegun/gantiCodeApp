@@ -127,11 +127,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { 
-      productId, 
-      qty_in, 
-      isComplated_set, 
-      isBody_only, 
+    const {
+      productId,
+      qty_in,
+      isComplated_set,
+      isBody_only,
       isLid_only,
       expirationYears,
       warehouseId,
@@ -140,16 +140,38 @@ export async function POST(request: NextRequest) {
       createdBy
     } = body;
 
-    if (!productId || !qty_in || !createdBy) {
+    if (!productId || !qty_in) {
       return NextResponse.json(
-        { success: false, error: 'Product ID, quantity, and created by are required' },
+        { success: false, error: 'Product ID and quantity are required' },
         { status: 400 }
       );
     }
 
+    // Find a valid user ID if createdBy is not provided or invalid
+    let validCreatedBy = createdBy;
+    if (!createdBy || createdBy === 'current-user') {
+      try {
+        const users = await prisma.user.findMany({ take: 1 });
+        if (users.length > 0) {
+          validCreatedBy = users[0].id;
+        } else {
+          return NextResponse.json(
+            { success: false, error: 'No users found in database' },
+            { status: 400 }
+          );
+        }
+      } catch (userError) {
+        console.error('Error finding users:', userError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to find valid user' },
+          { status: 500 }
+        );
+      }
+    }
+
     // Get product details from MySQL
     const productRows = await query(
-      `SELECT DesignCode, ClientCode, NameCode, CategoryCode, SizeCode, 
+      `SELECT DesignCode, ClientCode, NameCode, CategoryCode, SizeCode,
               ColorCode, TextureCode, MaterialCode, Photo1
        FROM tblcollect_master WHERE ID = ?`,
       [productId]
@@ -165,11 +187,35 @@ export async function POST(request: NextRequest) {
     const product = productRows[0];
 
     // Calculate expiration date
-    let expirationDate = null;
+    let expirationDate: Date | null = null;
     if (expirationYears && expirationYears > 0) {
       expirationDate = new Date();
       expirationDate.setFullYear(expirationDate.getFullYear() + expirationYears);
     }
+
+    // Validate shelfId if provided
+    console.log('Original shelfId:', shelfId, 'type:', typeof shelfId);
+    let validatedShelfId: string | null = null; // Start with null
+    if (shelfId && shelfId.trim() !== '') {
+      try {
+        console.log('Checking if shelf exists:', shelfId);
+        const shelfExists = await prisma.shelf.findUnique({
+          where: { id: shelfId }
+        });
+        console.log('Shelf exists result:', !!shelfExists);
+        if (shelfExists) {
+          validatedShelfId = shelfId;
+          console.log('Shelf found, using it');
+        } else {
+          console.log('Shelf not found, setting to null');
+        }
+      } catch (shelfError) {
+        console.log('Error checking shelf:', shelfError);
+      }
+    } else {
+      console.log('No shelfId provided or empty');
+    }
+    console.log('Final validatedShelfId:', validatedShelfId);
 
     // Create stock entry
     const stock = await prisma.stock.create({
@@ -193,9 +239,9 @@ export async function POST(request: NextRequest) {
         expirationYears: expirationYears || 2,
         expirationDate,
         warehouseId,
-        shelfId,
+        shelfId: validatedShelfId,
         notes,
-        createdBy,
+        createdBy: validCreatedBy,
         status: 'available'
       },
       include: {
@@ -225,8 +271,14 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error creating stock entry:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error details:', {
+      message: errorMessage,
+      code: (error as any)?.code,
+      meta: (error as any)?.meta
+    });
     return NextResponse.json(
-      { success: false, error: 'Failed to create stock entry' },
+      { success: false, error: `Failed to create stock entry: ${errorMessage}` },
       { status: 500 }
     );
   }

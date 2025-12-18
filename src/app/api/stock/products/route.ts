@@ -13,34 +13,12 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
-    let whereClause = 'WHERE 1=1';
-    const params: any[] = [];
-
-    if (search) {
-      whereClause += ` AND (m.CollectCode LIKE ? OR m.ClientCode LIKE ? OR d.DesignName LIKE ? OR n.NameDesc LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
-    }
-
-    if (clientCode) {
-      whereClause += ` AND m.ClientCode = ?`;
-      params.push(clientCode);
-    }
-
-    if (designCode) {
-      whereClause += ` AND m.DesignCode = ?`;
-      params.push(designCode);
-    }
-
-    if (categoryCode) {
-      whereClause += ` AND m.CategoryCode = ?`;
-      params.push(categoryCode);
-    }
-
+    // Simplified query to debug the issue
     const productsQuery = `
-      SELECT m.ID, m.CollectCode, m.DesignCode, m.NameCode, m.CategoryCode, 
+      SELECT m.ID, m.CollectCode, m.DesignCode, m.NameCode, m.CategoryCode,
              m.SizeCode, m.ColorCode, m.TextureCode, m.MaterialCode, m.ClientCode,
              m.Photo1, m.Photo2, m.PriceDollar, m.PriceEuro,
-             d.DesignName, n.NameDesc, c.CategoryName, co.ColorName, 
+             d.DesignName, n.NameDesc, c.CategoryName, co.ColorName,
              t.TextureName, s.SizeName, ma.MaterialName
       FROM tblcollect_master m
       LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
@@ -50,9 +28,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN tblcollect_texture t ON m.TextureCode = t.TextureCode
       LEFT JOIN tblcollect_size s ON m.SizeCode = s.SizeCode
       LEFT JOIN tblcollect_material ma ON m.MaterialCode = ma.MaterialCode
-      ${whereClause}
       ORDER BY m.CollectCode
-      LIMIT ? OFFSET ?
     `;
 
     const countQuery = `
@@ -65,21 +41,22 @@ export async function GET(request: NextRequest) {
       LEFT JOIN tblcollect_texture t ON m.TextureCode = t.TextureCode
       LEFT JOIN tblcollect_size s ON m.SizeCode = s.SizeCode
       LEFT JOIN tblcollect_material ma ON m.MaterialCode = ma.MaterialCode
-      ${whereClause}
     `;
 
     const [products, countResult] = await Promise.all([
-      query(productsQuery, [...params, limit, offset]) as any[],
-      query(countQuery, params) as any[]
+      query(productsQuery),
+      query(countQuery)
     ]);
 
-    const total = countResult && countResult.length > 0 ? countResult[0].total : 0;
+    const productsArray = products as any[];
+    const countArray = countResult as any[];
+    const total = countArray && countArray.length > 0 ? countArray[0].total : 0;
     const totalPages = Math.ceil(total / limit);
 
     return NextResponse.json({
       success: true,
       data: {
-        products: products || [],
+        products: productsArray || [],
         pagination: {
           page,
           limit,
@@ -147,25 +124,25 @@ export async function getProductById(request: NextRequest, { params }: { params:
 export async function getProductOptions() {
   try {
     const [designs, names, categories, colors, textures, sizes, materials] = await Promise.all([
-      query('SELECT DesignCode, DesignName FROM tblcollect_design ORDER BY DesignName') as any[],
-      query('SELECT NameCode, NameDesc FROM tblcollect_name ORDER BY NameDesc') as any[],
-      query('SELECT CategoryCode, CategoryName FROM tblcollect_category ORDER BY CategoryName') as any[],
-      query('SELECT ColorCode, ColorName FROM tblcollect_color ORDER BY ColorName') as any[],
-      query('SELECT TextureCode, TextureName FROM tblcollect_texture ORDER BY TextureName') as any[],
-      query('SELECT SizeCode, SizeName FROM tblcollect_size ORDER BY SizeName') as any[],
-      query('SELECT MaterialCode, MaterialName FROM tblcollect_material ORDER BY MaterialName') as any[]
+      query('SELECT DesignCode, DesignName FROM tblcollect_design ORDER BY DesignName'),
+      query('SELECT NameCode, NameDesc FROM tblcollect_name ORDER BY NameDesc'),
+      query('SELECT CategoryCode, CategoryName FROM tblcollect_category ORDER BY CategoryName'),
+      query('SELECT ColorCode, ColorName FROM tblcollect_color ORDER BY ColorName'),
+      query('SELECT TextureCode, TextureName FROM tblcollect_texture ORDER BY TextureName'),
+      query('SELECT SizeCode, SizeName FROM tblcollect_size ORDER BY SizeName'),
+      query('SELECT MaterialCode, MaterialName FROM tblcollect_material ORDER BY MaterialName')
     ]);
 
     return NextResponse.json({
       success: true,
       data: {
-        designs: designs || [],
-        names: names || [],
-        categories: categories || [],
-        colors: colors || [],
-        textures: textures || [],
-        sizes: sizes || [],
-        materials: materials || []
+        designs: designs as any[] || [],
+        names: names as any[] || [],
+        categories: categories as any[] || [],
+        colors: colors as any[] || [],
+        textures: textures as any[] || [],
+        sizes: sizes as any[] || [],
+        materials: materials as any[] || []
       }
     });
   } catch (error) {

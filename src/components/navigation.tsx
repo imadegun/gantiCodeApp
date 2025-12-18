@@ -39,7 +39,7 @@ const navigationItems = [
   },
   {
     name: 'Stock',
-    href: '/stock',
+    href: '/stock/enhanced',
     icon: Warehouse,
     description: 'Stock management and tracking'
   }

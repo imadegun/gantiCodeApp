@@ -105,6 +105,422 @@ interface Product {
   MaterialName: string;
 }
 
+interface Design {
+  DesignCode: string;
+  DesignName: string;
+}
+
+interface Category {
+  CategoryCode: string;
+  CategoryName: string;
+}
+
+interface ClientCode {
+  ClientCode: string;
+  ID: number;
+}
+
+// Warehouse Form Component
+function WarehouseForm({ warehouse, onSuccess }: { warehouse?: Warehouse; onSuccess: () => void }) {
+  const [formData, setFormData] = useState({
+    name: warehouse?.name || '',
+    code: warehouse?.code || '',
+    location: warehouse?.location || '',
+    description: warehouse?.description || ''
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const method = warehouse ? 'PUT' : 'POST';
+      const body = warehouse ? { id: warehouse.id, ...formData } : formData;
+
+      const response = await fetch('/api/stock/warehouses', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Success',
+          description: `Warehouse ${warehouse ? 'updated' : 'created'} successfully`
+        });
+        onSuccess();
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error,
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to save warehouse',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="name">Name *</Label>
+          <Input
+            id="name"
+            value={formData.name}
+            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="code">Code *</Label>
+          <Input
+            id="code"
+            value={formData.code}
+            onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
+            required
+          />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="location">Location</Label>
+        <Input
+          id="location"
+          value={formData.location}
+          onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+        />
+      </div>
+      <div>
+        <Label htmlFor="description">Description</Label>
+        <Textarea
+          id="description"
+          value={formData.description}
+          onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+          rows={3}
+        />
+      </div>
+      <Button type="submit" disabled={loading}>
+        {loading ? 'Saving...' : (warehouse ? 'Update' : 'Create')} Warehouse
+      </Button>
+    </form>
+  );
+}
+
+// Warehouse Card Component
+function WarehouseCard({ warehouse, onUpdate, onDelete }: {
+  warehouse: Warehouse;
+  onUpdate: () => void;
+  onDelete: () => void;
+}) {
+  const [showShelves, setShowShelves] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirm(`Are you sure you want to delete warehouse "${warehouse.name}"?`)) return;
+
+    try {
+      const response = await fetch(`/api/stock/warehouses?id=${warehouse.id}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Success',
+          description: 'Warehouse deleted successfully'
+        });
+        onDelete();
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error,
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete warehouse',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg">{warehouse.name}</CardTitle>
+            <CardDescription>{warehouse.code}</CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Edit Warehouse</DialogTitle>
+                  <DialogDescription>
+                    Update warehouse information
+                  </DialogDescription>
+                </DialogHeader>
+                <WarehouseForm warehouse={warehouse} onSuccess={onUpdate} />
+              </DialogContent>
+            </Dialog>
+            <Button size="sm" variant="outline" onClick={handleDelete}>
+              <XCircle className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          <div><strong>Location:</strong> {warehouse.location || 'Not specified'}</div>
+          <div><strong>Stock Items:</strong> {warehouse._count.stocks}</div>
+          <div><strong>Shelves:</strong> {warehouse.shelves.length}</div>
+          {warehouse.description && (
+            <div className="text-sm text-muted-foreground">{warehouse.description}</div>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowShelves(!showShelves)}
+          >
+            {showShelves ? 'Hide' : 'Show'} Shelves ({warehouse.shelves.length})
+          </Button>
+        </div>
+
+        {showShelves && (
+          <div className="mt-4 space-y-2">
+            {warehouse.shelves.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No shelves</p>
+            ) : (
+              warehouse.shelves.map((shelf) => (
+                <div key={shelf.id} className="text-sm p-2 bg-muted rounded">
+                  <div><strong>Code:</strong> {shelf.code}</div>
+                  {shelf.row && <div><strong>Row:</strong> {shelf.row}</div>}
+                  {shelf.column && <div><strong>Column:</strong> {shelf.column}</div>}
+                  {shelf.level && <div><strong>Level:</strong> {shelf.level}</div>}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Batch Expiration Manager Component
+function BatchExpirationManager() {
+  const [batchData, setBatchData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [selectedStocks, setSelectedStocks] = useState<string[]>([]);
+  const [newExpirationYears, setNewExpirationYears] = useState(2);
+
+  const fetchBatchData = async (days = 90) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/stock/batch-expiration?days=${days}`);
+      const result = await response.json();
+      if (result.success) {
+        setBatchData(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching batch data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBatchData();
+  }, []);
+
+  const handleBatchUpdate = async () => {
+    if (selectedStocks.length === 0) {
+      toast({
+        title: 'No Selection',
+        description: 'Please select stocks to update',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/stock/batch-expiration', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stockIds: selectedStocks,
+          expirationYears: newExpirationYears
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Success',
+          description: `${result.updatedCount} stocks updated successfully`
+        });
+        setSelectedStocks([]);
+        fetchBatchData();
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error,
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to batch update expiration',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const toggleStockSelection = (stockId: string) => {
+    setSelectedStocks(prev =>
+      prev.includes(stockId)
+        ? prev.filter(id => id !== stockId)
+        : [...prev, stockId]
+    );
+  };
+
+  const renderStockBatch = (stocks: any[], title: string, color: string) => (
+    <Card>
+      <CardHeader>
+        <CardTitle className={`text-lg ${color}`}>{title}</CardTitle>
+        <CardDescription>{stocks.length} items</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {stocks.length === 0 ? (
+          <p className="text-muted-foreground">No items in this batch</p>
+        ) : (
+          <div className="space-y-2">
+            {stocks.map((stock) => (
+              <div key={stock.id} className="flex items-center space-x-3 p-2 border rounded">
+                <Checkbox
+                  checked={selectedStocks.includes(stock.id)}
+                  onCheckedChange={() => toggleStockSelection(stock.id)}
+                />
+                <div className="flex-1">
+                  <div className="font-medium">{stock.product?.CollectCode || 'Unknown'}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {stock.product?.DesignName} - Expires: {stock.expirationDate ? new Date(stock.expirationDate).toLocaleDateString() : 'N/A'}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Warehouse: {stock.warehouse?.name || 'N/A'} | Available: {stock.availableQuantity}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Batch Expiration Management</h2>
+          <p className="text-muted-foreground">Identify and manage expiring stock in batches</p>
+        </div>
+        <Button onClick={() => fetchBatchData()} disabled={loading}>
+          {loading ? 'Loading...' : 'Refresh Data'}
+        </Button>
+      </div>
+
+      {batchData && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-red-600">{batchData.criticalCount}</div>
+              <p className="text-sm text-muted-foreground">Critical (≤7 days)</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-yellow-600">{batchData.warningCount}</div>
+              <p className="text-sm text-muted-foreground">Warning (7-30 days)</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-blue-600">{batchData.upcomingCount}</div>
+              <p className="text-sm text-muted-foreground">Upcoming (30+ days)</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {selectedStocks.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Batch Update Expiration</CardTitle>
+            <CardDescription>
+              Update expiration dates for {selectedStocks.length} selected stocks
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4 items-end">
+              <div>
+                <Label htmlFor="batch-expiration">New Expiration Years</Label>
+                <Select
+                  value={newExpirationYears.toString()}
+                  onValueChange={(value) => setNewExpirationYears(parseInt(value))}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2">2 Years</SelectItem>
+                    <SelectItem value="5">5 Years</SelectItem>
+                    <SelectItem value="10">10 Years</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={handleBatchUpdate}>
+                Update {selectedStocks.length} Stocks
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {batchData && (
+        <div className="space-y-6">
+          {renderStockBatch(batchData.batches.critical, 'Critical Expiring (≤7 days)', 'text-red-600')}
+          {renderStockBatch(batchData.batches.warning, 'Warning Expiring (7-30 days)', 'text-yellow-600')}
+          {renderStockBatch(batchData.batches.upcoming, 'Upcoming Expiring (30+ days)', 'text-blue-600')}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function EnhancedStockManagement() {
   const [stockData, setStockData] = useState<StockItem[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -128,6 +544,10 @@ export default function EnhancedStockManagement() {
   });
   const [selectedStock, setSelectedStock] = useState<StockItem | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [designs, setDesigns] = useState<Design[]>([]);
+  const [clientCodes, setClientCodes] = useState<ClientCode[]>([]);
+  const [selectedDesign, setSelectedDesign] = useState<string>('');
+  const [selectedClientCode, setSelectedClientCode] = useState<string>('');
 
   // Fetch warehouses
   const fetchWarehouses = async () => {
@@ -147,15 +567,40 @@ export default function EnhancedStockManagement() {
     try {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
-      params.append('limit', '50');
 
       const response = await fetch(`/api/stock/products?${params}`);
       const result = await response.json();
       if (result.success) {
-        setProducts(result.data.products);
+        setProducts(result.data.products || []);
       }
     } catch (error) {
       console.error('Error fetching products:', error);
+    }
+  };
+
+  // Fetch designs
+  const fetchDesigns = async () => {
+    try {
+      const response = await fetch('/api/designs');
+      const result = await response.json();
+      if (result.success) {
+        setDesigns(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching designs:', error);
+    }
+  };
+
+  // Fetch client codes for selected design
+  const fetchClientCodes = async (designCode: string) => {
+    try {
+      const response = await fetch(`/api/stock/products/client-codes?designCode=${designCode}`);
+      const result = await response.json();
+      if (result.success) {
+        setClientCodes(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching client codes:', error);
     }
   };
 
@@ -194,8 +639,39 @@ export default function EnhancedStockManagement() {
   useEffect(() => {
     fetchWarehouses();
     fetchProducts();
+    fetchDesigns();
     fetchStockData();
   }, [statusFilter, warehouseFilter]);
+
+  // Fetch client codes when design is selected
+  useEffect(() => {
+    if (selectedDesign) {
+      fetchClientCodes(selectedDesign);
+      // Reset dependent selections
+      setSelectedClientCode('');
+      setSelectedProduct(null);
+    } else {
+      setClientCodes([]);
+      setSelectedClientCode('');
+      setSelectedProduct(null);
+    }
+  }, [selectedDesign]);
+
+  // Find product when client code is selected
+  useEffect(() => {
+    if (selectedDesign && selectedClientCode) {
+      const product = products.find(p =>
+        p.DesignCode === selectedDesign &&
+        p.ClientCode === selectedClientCode
+      );
+      setSelectedProduct(product || null);
+      if (product) {
+        setIncomingStock(prev => ({ ...prev, productId: product.ID }));
+      }
+    } else {
+      setSelectedProduct(null);
+    }
+  }, [selectedDesign, selectedClientCode, products]);
 
   // Add incoming stock
   const handleAddStock = async () => {
@@ -235,6 +711,8 @@ export default function EnhancedStockManagement() {
           createdBy: 'current-user'
         });
         setSelectedProduct(null);
+        setSelectedDesign('');
+        setSelectedClientCode('');
         fetchStockData();
       } else {
         toast({
@@ -402,7 +880,7 @@ export default function EnhancedStockManagement() {
                         searchTerm === '' || 
                         stock.designCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
                         stock.clientCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        (stock.product?.CollectCode?.toLowerCase().includes(searchTerm.toLowerCase()))
+                        (stock.product?.ClientCode?.toLowerCase().includes(searchTerm.toLowerCase()))
                       )
                       .map((stock) => (
                       <TableRow key={stock.id}>
@@ -411,12 +889,12 @@ export default function EnhancedStockManagement() {
                             {stock.product?.Photo1 && (
                               <img 
                                 src={stock.product.Photo1} 
-                                alt={stock.product.CollectCode}
+                                alt={stock.product.ClientCode}
                                 className="h-10 w-10 rounded object-cover"
                               />
                             )}
                             <div>
-                              <div className="font-medium">{stock.product?.CollectCode}</div>
+                              <div className="font-medium">{stock.product?.ClientCode}</div>
                               <div className="text-sm text-muted-foreground">
                                 {stock.product?.DesignName} - {stock.product?.NameDesc}
                               </div>
@@ -485,7 +963,7 @@ export default function EnhancedStockManagement() {
                             <DialogContent className="max-w-4xl">
                               <DialogHeader>
                                 <DialogTitle>
-                                  Stock Details - {stock.product?.CollectCode}
+                                  Stock Details - {stock.product?.ClientCode}
                                 </DialogTitle>
                                 <DialogDescription>
                                   Detailed information for this stock item
@@ -496,7 +974,7 @@ export default function EnhancedStockManagement() {
                                   <div>
                                     <Label>Product Information</Label>
                                     <div className="mt-2 space-y-2">
-                                      <div><strong>Collect Code:</strong> {stock.product?.CollectCode}</div>
+                                      <div><strong>Collect Code:</strong> {stock.product?.ClientCode}</div>
                                       <div><strong>Design:</strong> {stock.product?.DesignName}</div>
                                       <div><strong>Name:</strong> {stock.product?.NameDesc}</div>
                                       <div><strong>Category:</strong> {stock.product?.CategoryName}</div>
@@ -565,29 +1043,56 @@ export default function EnhancedStockManagement() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <Label htmlFor="product">Select Product</Label>
+                  <Label htmlFor="design">Select Design</Label>
                   <Select
-                    value={selectedProduct?.ID?.toString() || ''}
-                    onValueChange={(value) => {
-                      const product = products.find(p => p.ID === parseInt(value));
-                      setSelectedProduct(product || null);
-                      if (product) {
-                        setIncomingStock(prev => ({ ...prev, productId: product.ID }));
-                      }
-                    }}
+                    value={selectedDesign}
+                    onValueChange={setSelectedDesign}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Search and select a product..." />
+                    <SelectTrigger id="design">
+                      <SelectValue placeholder="Select a design..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {products.map((product) => (
-                        <SelectItem key={product.ID} value={product.ID.toString()}>
-                          {product.CollectCode} - {product.DesignName} - {product.NameDesc}
+                      {designs.map((design) => (
+                        <SelectItem key={design.DesignCode} value={design.DesignCode}>
+                          {design.DesignName}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+
+                {selectedDesign && (
+                  <div className="col-span-2">
+                    <Label htmlFor="clientCode">Select Client Code</Label>
+                    <Select
+                      value={selectedClientCode}
+                      onValueChange={setSelectedClientCode}
+                    >
+                      <SelectTrigger id="clientCode">
+                        <SelectValue placeholder="Select a client code..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clientCodes.map((clientCode) => (
+                          <SelectItem key={clientCode.ID} value={clientCode.ClientCode}>
+                            {clientCode.ClientCode}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {selectedProduct && (
+                  <div className="col-span-2">
+                    <Label>Selected Product</Label>
+                    <div className="mt-2 p-3 bg-muted rounded-md">
+                      <div className="font-medium">{selectedProduct.CollectCode}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {selectedProduct.DesignName} - {selectedProduct.NameDesc} - {selectedProduct.CategoryName}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 <div>
                   <Label htmlFor="quantity">Quantity</Label>
@@ -687,56 +1192,46 @@ export default function EnhancedStockManagement() {
         </TabsContent>
 
         <TabsContent value="warehouses" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Warehouse Management</CardTitle>
-              <CardDescription>
-                View and manage warehouse locations
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {warehouses.map((warehouse) => (
-                  <Card key={warehouse.id}>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg">{warehouse.name}</CardTitle>
-                      <CardDescription>{warehouse.code}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div><strong>Location:</strong> {warehouse.location || 'Not specified'}</div>
-                        <div><strong>Stock Items:</strong> {warehouse._count.stocks}</div>
-                        <div><strong>Shelves:</strong> {warehouse.shelves.length}</div>
-                        {warehouse.description && (
-                          <div className="text-sm text-muted-foreground">{warehouse.description}</div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Warehouse Management</h2>
+              <p className="text-muted-foreground">Manage warehouses and shelves</p>
+            </div>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Warehouse
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Warehouse</DialogTitle>
+                  <DialogDescription>
+                    Create a new warehouse location
+                  </DialogDescription>
+                </DialogHeader>
+                <WarehouseForm onSuccess={() => {
+                  fetchWarehouses();
+                }} />
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {warehouses.map((warehouse) => (
+              <WarehouseCard
+                key={warehouse.id}
+                warehouse={warehouse}
+                onUpdate={fetchWarehouses}
+                onDelete={fetchWarehouses}
+              />
+            ))}
+          </div>
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Stock Notifications</CardTitle>
-              <CardDescription>
-                Expiration warnings and stock alerts
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8">
-                <Bell className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                <p>Stock notifications will appear here</p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  System will notify you about expiring stock and low inventory levels
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <BatchExpirationManager />
         </TabsContent>
       </Tabs>
     </div>

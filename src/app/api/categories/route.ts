@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/mysql';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const sql = 'SELECT CategoryCode, CategoryName FROM tblcollect_category ORDER BY CategoryName';
-    const results = await query(sql) as any[];
-    
+    const { searchParams } = new URL(request.url);
+    const designCode = searchParams.get('designCode');
+
+    let sql = 'SELECT DISTINCT c.CategoryCode, c.CategoryName FROM tblcollect_category c';
+    const params: any[] = [];
+
+    if (designCode) {
+      sql += ' INNER JOIN tblcollect_master m ON c.CategoryCode = m.CategoryCode WHERE m.DesignCode = ?';
+      params.push(designCode);
+    }
+
+    sql += ' ORDER BY c.CategoryName';
+
+    const results = await query(sql, params) as any[];
+
     return NextResponse.json({
       success: true,
       data: results

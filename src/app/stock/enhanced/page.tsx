@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Package, TrendingUp, TrendingDown, Eye, CheckCircle, XCircle, AlertTriangle, Bell, Warehouse, Calendar, Search } from 'lucide-react';
+import { Plus, Package, TrendingUp, TrendingDown, Eye, CheckCircle, XCircle, AlertTriangle, Bell, Warehouse, Calendar, Search, ImageIcon } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface StockItem {
@@ -860,173 +860,189 @@ export default function EnhancedStockManagement() {
                   <p>No stock data found</p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Warehouse</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Available</TableHead>
-                      <TableHead>Reserved</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Expiration</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {stockData
-                      .filter(stock => 
-                        searchTerm === '' || 
-                        stock.designCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        stock.clientCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        (stock.product?.ClientCode?.toLowerCase().includes(searchTerm.toLowerCase()))
-                      )
-                      .map((stock) => (
-                      <TableRow key={stock.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            {stock.product?.Photo1 && (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Photo</TableHead>
+                        <TableHead>Client Code</TableHead>
+                        <TableHead>Design</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Size</TableHead>
+                        <TableHead>Texture</TableHead>
+                        <TableHead>Color</TableHead>
+                        <TableHead>Available</TableHead>
+                        <TableHead>Reserved</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Expiration</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {stockData
+                        .filter(stock => 
+                          searchTerm === '' || 
+                          stock.designCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          stock.clientCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (stock.product?.ClientCode?.toLowerCase().includes(searchTerm.toLowerCase()))
+                        )
+                        .map((stock) => (
+                        <TableRow key={stock.id}>
+                          <TableCell>
+                            {stock.product?.Photo1 ? (
                               <img 
-                                src={stock.product.Photo1} 
-                                alt={stock.product.ClientCode}
-                                className="h-10 w-10 rounded object-cover"
+                                src={stock.product.Photo1.startsWith('http') ? stock.product.Photo1 : `http://192.168.1.110/upload/${stock.product.Photo1}`}
+                                alt={stock.product?.ClientCode || 'Product'}
+                                className="h-12 w-12 rounded object-cover border"
+                                onError={(e) => {
+                                  e.currentTarget.src = '';
+                                  e.currentTarget.alt = 'No image';
+                                }}
                               />
-                            )}
-                            <div>
-                              <div className="font-medium">{stock.product?.ClientCode}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {stock.product?.DesignName} - {stock.product?.NameDesc}
+                            ) : (
+                              <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center">
+                                <ImageIcon className="h-6 w-6 text-muted-foreground" />
                               </div>
-                              {stock.isExpiringSoon && (
-                                <Badge variant="destructive" className="text-xs mt-1">
-                                  Expiring Soon
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {stock.warehouse ? (
-                            <div className="flex items-center gap-2">
-                              <Warehouse className="h-4 w-4" />
-                              <span>{stock.warehouse.name}</span>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">Unassigned</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {stock.shelf ? (
+                            )}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {stock.product?.ClientCode || '-'}
+                          </TableCell>
+                          <TableCell>
                             <div className="text-sm">
-                              {stock.shelf.code}
-                              {stock.shelf.row && ` - Row ${stock.shelf.row}`}
-                              {stock.shelf.column && ` - Col ${stock.shelf.column}`}
-                              {stock.shelf.level && ` - Level ${stock.shelf.level}`}
+                              <div className="font-medium">{stock.product?.DesignName || '-'}</div>
+                              <div className="text-muted-foreground">{stock.product?.NameDesc || '-'}</div>
                             </div>
-                          ) : (
-                            <span className="text-muted-foreground">Unassigned</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-medium">{stock.availableQuantity}</TableCell>
-                        <TableCell>{stock.qty_offer}</TableCell>
-                        <TableCell className="font-medium">{stock.total}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(stock.status)}
-                            {getStatusBadge(stock.status)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {stock.expirationDate ? (
+                          </TableCell>
+                          <TableCell>
+                            {stock.product?.CategoryName || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {stock.product?.SizeName || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {stock.product?.TextureName || '-'}
+                          </TableCell>
+                          <TableCell>
                             <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              <span className="text-sm">
-                                {new Date(stock.expirationDate).toLocaleDateString()}
-                              </span>
+                              <div 
+                                className="h-4 w-4 rounded border" 
+                                style={{ backgroundColor: stock.product?.ColorName || '#cccccc' }}
+                              ></div>
+                              <span>{stock.product?.ColorName || '-'}</span>
                             </div>
-                          ) : (
-                            <span className="text-muted-foreground">No expiration</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Dialog>
-                            <DialogTrigger asChild>
+                          </TableCell>
+                          <TableCell className="font-medium">{stock.availableQuantity}</TableCell>
+                          <TableCell>{stock.qty_offer}</TableCell>
+                          <TableCell className="font-medium">{stock.total}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getStatusIcon(stock.status)}
+                              {getStatusBadge(stock.status)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {stock.expirationDate ? (
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4" />
+                                <span className="text-sm">
+                                  {new Date(stock.expirationDate).toLocaleDateString()}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">No expiration</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setSelectedStock(stock)}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                                  <DialogHeader>
+                                    <DialogTitle>
+                                      Stock Details - {stock.product?.ClientCode}
+                                    </DialogTitle>
+                                    <DialogDescription>
+                                      Detailed information for this stock item
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-4">
+                                      <div>
+                                        <Label>Product Information</Label>
+                                        <div className="mt-2 space-y-2">
+                                          <div><strong>Collect Code:</strong> {stock.product?.ClientCode}</div>
+                                          <div><strong>Design:</strong> {stock.product?.DesignName}</div>
+                                          <div><strong>Name:</strong> {stock.product?.NameDesc}</div>
+                                          <div><strong>Category:</strong> {stock.product?.CategoryName}</div>
+                                          <div><strong>Size:</strong> {stock.product?.SizeName}</div>
+                                          <div><strong>Color:</strong> {stock.product?.ColorName}</div>
+                                          <div><strong>Material:</strong> {stock.product?.MaterialName}</div>
+                                          <div><strong>Texture:</strong> {stock.product?.TextureName}</div>
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <Label>Stock Properties</Label>
+                                        <div className="mt-2 space-y-2">
+                                          <div><strong>Complete Set:</strong> {stock.isComplated_set ? 'Yes' : 'No'}</div>
+                                          <div><strong>Body Only:</strong> {stock.isBody_only ? 'Yes' : 'No'}</div>
+                                          <div><strong>Lid Only:</strong> {stock.isLid_only ? 'Yes' : 'No'}</div>
+                                          <div><strong>Expiration Years:</strong> {stock.expirationYears}</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <Label>Location</Label>
+                                        <div className="mt-2 space-y-2">
+                                          <div><strong>Warehouse:</strong> {stock.warehouse?.name || 'Unassigned'}</div>
+                                          <div><strong>Shelf:</strong> {stock.shelf?.code || 'Unassigned'}</div>
+                                          {stock.shelf?.row && <div><strong>Row:</strong> {stock.shelf.row}</div>}
+                                          {stock.shelf?.column && <div><strong>Column:</strong> {stock.shelf.column}</div>}
+                                          {stock.shelf?.level && <div><strong>Level:</strong> {stock.shelf.level}</div>}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <Label>Quantities</Label>
+                                        <div className="mt-2 space-y-2">
+                                          <div><strong>Total In:</strong> {stock.qty_in}</div>
+                                          <div><strong>Reserved:</strong> {stock.qty_offer}</div>
+                                          <div><strong>Available:</strong> {stock.availableQuantity}</div>
+                                        </div>
+                                      </div>
+                                      {stock.notes && (
+                                        <div>
+                                          <Label>Notes</Label>
+                                          <p className="mt-2 text-sm">{stock.notes}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setSelectedStock(stock)}
+                                onClick={() => window.open(`/products/${stock.productId}`, '_blank')}
                               >
-                                <Eye className="h-4 w-4" />
+                                <Package className="h-4 w-4" />
                               </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-4xl">
-                              <DialogHeader>
-                                <DialogTitle>
-                                  Stock Details - {stock.product?.ClientCode}
-                                </DialogTitle>
-                                <DialogDescription>
-                                  Detailed information for this stock item
-                                </DialogDescription>
-                              </DialogHeader>
-                              <div className="grid grid-cols-2 gap-6">
-                                <div className="space-y-4">
-                                  <div>
-                                    <Label>Product Information</Label>
-                                    <div className="mt-2 space-y-2">
-                                      <div><strong>Collect Code:</strong> {stock.product?.ClientCode}</div>
-                                      <div><strong>Design:</strong> {stock.product?.DesignName}</div>
-                                      <div><strong>Name:</strong> {stock.product?.NameDesc}</div>
-                                      <div><strong>Category:</strong> {stock.product?.CategoryName}</div>
-                                      <div><strong>Size:</strong> {stock.product?.SizeName}</div>
-                                      <div><strong>Color:</strong> {stock.product?.ColorName}</div>
-                                      <div><strong>Material:</strong> {stock.product?.MaterialName}</div>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <Label>Stock Properties</Label>
-                                    <div className="mt-2 space-y-2">
-                                      <div><strong>Complete Set:</strong> {stock.isComplated_set ? 'Yes' : 'No'}</div>
-                                      <div><strong>Body Only:</strong> {stock.isBody_only ? 'Yes' : 'No'}</div>
-                                      <div><strong>Lid Only:</strong> {stock.isLid_only ? 'Yes' : 'No'}</div>
-                                      <div><strong>Expiration Years:</strong> {stock.expirationYears}</div>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="space-y-4">
-                                  <div>
-                                    <Label>Location</Label>
-                                    <div className="mt-2 space-y-2">
-                                      <div><strong>Warehouse:</strong> {stock.warehouse?.name || 'Unassigned'}</div>
-                                      <div><strong>Shelf:</strong> {stock.shelf?.code || 'Unassigned'}</div>
-                                      {stock.shelf?.row && <div><strong>Row:</strong> {stock.shelf.row}</div>}
-                                      {stock.shelf?.column && <div><strong>Column:</strong> {stock.shelf.column}</div>}
-                                      {stock.shelf?.level && <div><strong>Level:</strong> {stock.shelf.level}</div>}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <Label>Quantities</Label>
-                                    <div className="mt-2 space-y-2">
-                                      <div><strong>Total In:</strong> {stock.qty_in}</div>
-                                      <div><strong>Reserved:</strong> {stock.qty_offer}</div>
-                                      <div><strong>Available:</strong> {stock.availableQuantity}</div>
-                                    </div>
-                                  </div>
-                                  {stock.notes && (
-                                    <div>
-                                      <Label>Notes</Label>
-                                      <p className="mt-2 text-sm">{stock.notes}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>

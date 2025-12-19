@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       productId,
+      productType,
       qty_in,
       isComplated_set,
       isBody_only,
@@ -230,6 +231,7 @@ export async function POST(request: NextRequest) {
         textureCode: product.TextureCode,
         materialCode: product.MaterialCode,
         photo1: product.Photo1,
+        productType: productType || 'SINGLE_ITEM',
         qty_in,
         total: qty_in,
         availableQuantity: qty_in,

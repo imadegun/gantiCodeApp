@@ -140,6 +140,12 @@ enum UserRole {
   USER
 }
 
+enum ProductType {
+  SINGLE_ITEM    // Tea cups, plates, etc. (standalone items)
+  SET_PRODUCT    // Products that come as sets (e.g., tea pot with lid)
+  COMPONENT      // Spare parts, replacements (body only, lid only, etc.)
+}
+
 enum OfferStatus {
   pending
   approved
@@ -170,6 +176,7 @@ model Stock {
   textureCode  String?
   sizeCode     String?
   materialCode String?
+  productType  ProductType @default(SINGLE_ITEM) // Classification of product type
 
   // -- Internal Stock Fields --
   department String?

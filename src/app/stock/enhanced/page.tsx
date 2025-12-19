@@ -28,6 +28,7 @@ interface StockItem {
   sizeCode?: string;
   materialCode?: string;
   photo1?: string;
+  productType: 'SINGLE_ITEM' | 'SET_PRODUCT' | 'COMPONENT';
   qty_in: number;
   qty_offer: number;
   total: number;
@@ -72,6 +73,7 @@ interface Warehouse {
 
 interface IncomingStock {
   productId: number;
+  productType: 'SINGLE_ITEM' | 'SET_PRODUCT' | 'COMPONENT';
   qty_in: number;
   isComplated_set: boolean;
   isBody_only: boolean;
@@ -532,6 +534,7 @@ export default function EnhancedStockManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [incomingStock, setIncomingStock] = useState<IncomingStock>({
     productId: 0,
+    productType: 'SINGLE_ITEM',
     qty_in: 0,
     isComplated_set: false,
     isBody_only: false,
@@ -700,6 +703,7 @@ export default function EnhancedStockManagement() {
         });
         setIncomingStock({
           productId: 0,
+          productType: 'SINGLE_ITEM',
           qty_in: 0,
           isComplated_set: false,
           isBody_only: false,
@@ -756,6 +760,52 @@ export default function EnhancedStockManagement() {
         return <XCircle className="h-4 w-4 text-red-600" />;
       default:
         return <Package className="h-4 w-4" />;
+    }
+  };
+
+  // Get product type badge and icon
+  const getProductTypeInfo = (productType: string) => {
+    switch (productType) {
+      case 'SINGLE_ITEM':
+        return {
+          badge: <Badge className="bg-blue-100 text-blue-800">Single Item</Badge>,
+          icon: <Package className="h-4 w-4 text-blue-600" />,
+          description: 'Standalone product (e.g., tea cup, plate)'
+        };
+      case 'SET_PRODUCT':
+        return {
+          badge: <Badge className="bg-purple-100 text-purple-800">Set Product</Badge>,
+          icon: <Package className="h-4 w-4 text-purple-600" />,
+          description: 'Product that comes as a set (e.g., tea pot with lid)'
+        };
+      case 'COMPONENT':
+        return {
+          badge: <Badge className="bg-orange-100 text-orange-800">Component</Badge>,
+          icon: <Package className="h-4 w-4 text-orange-600" />,
+          description: 'Spare part or replacement component'
+        };
+      default:
+        return {
+          badge: <Badge variant="secondary">Unknown</Badge>,
+          icon: <Package className="h-4 w-4" />,
+          description: 'Product type not specified'
+        };
+    }
+  };
+
+  // Calculate actual available stock based on product type
+  const getActualAvailableStock = (stock: StockItem) => {
+    switch (stock.productType) {
+      case 'SINGLE_ITEM':
+        return stock.availableQuantity;
+      case 'SET_PRODUCT':
+        // Only count complete sets as available stock
+        return stock.isComplated_set ? stock.availableQuantity : 0;
+      case 'COMPONENT':
+        // Components are not available for selling as complete products
+        return 0;
+      default:
+        return stock.availableQuantity;
     }
   };
 
@@ -867,6 +917,7 @@ export default function EnhancedStockManagement() {
                         <TableHead>Photo</TableHead>
                         <TableHead>Code</TableHead>
                         <TableHead>Design</TableHead>
+                        <TableHead>Type</TableHead>
                         <TableHead>Category</TableHead>
                         <TableHead>Size</TableHead>
                         <TableHead>Texture</TableHead>
@@ -875,7 +926,7 @@ export default function EnhancedStockManagement() {
                         <TableHead>Reserved</TableHead>
                         <TableHead>Total</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Expiration</TableHead>
+                        {/* <TableHead>Expiration</TableHead> */}
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -913,16 +964,13 @@ export default function EnhancedStockManagement() {
                             <div className="text-sm">
                               <div className="font-medium">{stock.product?.DesignName || '-'}</div>
                               <div className="text-muted-foreground">{stock.product?.NameDesc || '-'}</div>
-                              <div className="flex gap-1 mt-1">
-                                {stock.isBody_only && (
-                                  <Badge variant="secondary" className="text-xs">Body Only</Badge>
-                                )}
-                                {stock.isLid_only && (
-                                  <Badge variant="secondary" className="text-xs">Lid Only</Badge>
-                                )}
-                                {stock.isComplated_set && (
-                                  <Badge variant="secondary" className="text-xs">Complete Set</Badge>
-                                )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              {getProductTypeInfo(stock.productType).badge}
+                              <div className="text-xs text-muted-foreground" title={getProductTypeInfo(stock.productType).description}>
+                                {getProductTypeInfo(stock.productType).description}
                               </div>
                             </div>
                           </TableCell>
@@ -937,17 +985,11 @@ export default function EnhancedStockManagement() {
                           </TableCell>
                           <TableCell className="font-medium"> {stock.product?.ColorName || '-'}</TableCell>
                           <TableCell className="font-medium">
-                            {stock.isBody_only || stock.isLid_only ? (
-                              <span className="text-muted-foreground" title="Not counted as available stock as it's not a complete item">
-                                N/A
-                              </span>
-                            ) : (
-                              stock.availableQuantity
-                            )}
+                            {getActualAvailableStock(stock)}
                           </TableCell>
                           <TableCell>
-                            {stock.isBody_only || stock.isLid_only ? (
-                              <span className="text-muted-foreground" title="Not counted in reservations as it's not a complete item">
+                            {stock.productType === 'COMPONENT' ? (
+                              <span className="text-muted-foreground" title="Components are not reserved for offers">
                                 N/A
                               </span>
                             ) : (
@@ -955,13 +997,14 @@ export default function EnhancedStockManagement() {
                             )}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {stock.isBody_only || stock.isLid_only ? (
-                              <span className="text-muted-foreground line-through" title="Excluded from total stock as it's not a complete item">
-                                {stock.total}
-                              </span>
-                            ) : (
-                              stock.total
-                            )}
+                            <div className="flex flex-col">
+                              <span>{stock.total}</span>
+                              {stock.productType === 'SET_PRODUCT' && (
+                                <span className="text-xs text-muted-foreground">
+                                  Sets: {stock.isComplated_set ? stock.total : 0}
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">
@@ -972,10 +1015,10 @@ export default function EnhancedStockManagement() {
                               {(stock.isBody_only || stock.isLid_only || stock.isComplated_set) && (
                                 <div className="flex gap-1">
                                   {stock.isBody_only && (
-                                    <Badge variant="outline" className="text-xs px-1 py-0">Body</Badge>
+                                    <Badge variant="outline" className="text-xs px-1 py-0">Body Only</Badge>
                                   )}
                                   {stock.isLid_only && (
-                                    <Badge variant="outline" className="text-xs px-1 py-0">Lid</Badge>
+                                    <Badge variant="outline" className="text-xs px-1 py-0">Lid Only</Badge>
                                   )}
                                   {stock.isComplated_set && (
                                     <Badge variant="outline" className="text-xs px-1 py-0">Set</Badge>
@@ -984,7 +1027,7 @@ export default function EnhancedStockManagement() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          {/* <TableCell>
                             {stock.expirationDate ? (
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4" />
@@ -995,7 +1038,7 @@ export default function EnhancedStockManagement() {
                             ) : (
                               <span className="text-muted-foreground">No expiration</span>
                             )}
-                          </TableCell>
+                          </TableCell> */}
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Dialog>
@@ -1035,6 +1078,7 @@ export default function EnhancedStockManagement() {
                                       <div>
                                         <Label>Stock Properties</Label>
                                         <div className="mt-2 space-y-2">
+                                          <div><strong>Product Type:</strong> {getProductTypeInfo(stock.productType).badge}</div>
                                           <div><strong>Complete Set:</strong> {stock.isComplated_set ? 'Yes' : 'No'}</div>
                                           <div><strong>Body Only:</strong> {stock.isBody_only ? 'Yes' : 'No'}</div>
                                           <div><strong>Lid Only:</strong> {stock.isLid_only ? 'Yes' : 'No'}</div>
@@ -1059,6 +1103,17 @@ export default function EnhancedStockManagement() {
                                           <div><strong>Total In:</strong> {stock.qty_in}</div>
                                           <div><strong>Reserved:</strong> {stock.qty_offer}</div>
                                           <div><strong>Available:</strong> {stock.availableQuantity}</div>
+                                          <div><strong>Actual Available:</strong> {getActualAvailableStock(stock)}</div>
+                                          {stock.productType === 'SET_PRODUCT' && (
+                                            <div className="text-sm text-muted-foreground">
+                                              Only complete sets are counted as available stock for selling
+                                            </div>
+                                          )}
+                                          {stock.productType === 'COMPONENT' && (
+                                            <div className="text-sm text-muted-foreground">
+                                              Components are not available for selling as complete products
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
                                       {stock.notes && (
@@ -1093,13 +1148,31 @@ export default function EnhancedStockManagement() {
         <TabsContent value="incoming" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Add Incoming Stock</CardTitle>
+              <CardTitle>Add Stock</CardTitle>
               <CardDescription>
                 Add new stock with warehouse and expiration tracking
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label htmlFor="productType">Product Type</Label>
+                  <Select
+                    value={incomingStock.productType}
+                    onValueChange={(value: 'SINGLE_ITEM' | 'SET_PRODUCT' | 'COMPONENT') =>
+                      setIncomingStock(prev => ({ ...prev, productType: value }))}
+                  >
+                    <SelectTrigger id="productType">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SINGLE_ITEM">Single Item (e.g., tea cups, plates)</SelectItem>
+                      <SelectItem value="SET_PRODUCT">Set Product (e.g., tea pot with lid)</SelectItem>
+                      <SelectItem value="COMPONENT">Component (e.g., body only, lid only)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="col-span-2">
                   <Label htmlFor="design">Select Design</Label>
                   <Select
@@ -1121,7 +1194,7 @@ export default function EnhancedStockManagement() {
 
                 {selectedDesign && (
                   <div className="col-span-2">
-                    <Label htmlFor="clientCode">Select Client Code</Label>
+                    <Label htmlFor="clientCode">Select Code</Label>
                     <Select
                       value={selectedClientCode}
                       onValueChange={setSelectedClientCode}

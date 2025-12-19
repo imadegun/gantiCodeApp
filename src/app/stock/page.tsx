@@ -343,8 +343,8 @@ export default function StockManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="clientcode">ClientCode</SelectItem>
-                    <SelectItem value="designcode">DesignCode</SelectItem>
+                    <SelectItem value="clientcode">Code</SelectItem>
+                    <SelectItem value="designcode">Design</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -573,8 +573,8 @@ export default function StockManagement() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="clientcode">ClientCode</SelectItem>
-                      <SelectItem value="designcode">DesignCode</SelectItem>
+                      <SelectItem value="clientcode">Code</SelectItem>
+                      <SelectItem value="designcode">Design</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

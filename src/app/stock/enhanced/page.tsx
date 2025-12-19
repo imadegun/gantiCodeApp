@@ -865,7 +865,7 @@ export default function EnhancedStockManagement() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Photo</TableHead>
-                        <TableHead>Client Code</TableHead>
+                        <TableHead>Code</TableHead>
                         <TableHead>Design</TableHead>
                         <TableHead>Category</TableHead>
                         <TableHead>Size</TableHead>
@@ -894,15 +894,15 @@ export default function EnhancedStockManagement() {
                               <img 
                                 src={stock.product.Photo1.startsWith('http') ? stock.product.Photo1 : `http://192.168.1.110/upload/${stock.product.Photo1}`}
                                 alt={stock.product?.ClientCode || 'Product'}
-                                className="h-12 w-12 rounded object-cover border"
+                                className="h-24 w-24 rounded object-cover border"
                                 onError={(e) => {
                                   e.currentTarget.src = '';
                                   e.currentTarget.alt = 'No image';
                                 }}
                               />
                             ) : (
-                              <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center">
-                                <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                              <div className="h-24 w-24 rounded border bg-muted flex items-center justify-center">
+                                <ImageIcon className="h-8 w-8 text-muted-foreground" />
                               </div>
                             )}
                           </TableCell>
@@ -913,6 +913,17 @@ export default function EnhancedStockManagement() {
                             <div className="text-sm">
                               <div className="font-medium">{stock.product?.DesignName || '-'}</div>
                               <div className="text-muted-foreground">{stock.product?.NameDesc || '-'}</div>
+                              <div className="flex gap-1 mt-1">
+                                {stock.isBody_only && (
+                                  <Badge variant="secondary" className="text-xs">Body Only</Badge>
+                                )}
+                                {stock.isLid_only && (
+                                  <Badge variant="secondary" className="text-xs">Lid Only</Badge>
+                                )}
+                                {stock.isComplated_set && (
+                                  <Badge variant="secondary" className="text-xs">Complete Set</Badge>
+                                )}
+                              </div>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -924,22 +935,53 @@ export default function EnhancedStockManagement() {
                           <TableCell>
                             {stock.product?.TextureName || '-'}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="h-4 w-4 rounded border" 
-                                style={{ backgroundColor: stock.product?.ColorName || '#cccccc' }}
-                              ></div>
-                              <span>{stock.product?.ColorName || '-'}</span>
-                            </div>
+                          <TableCell className="font-medium"> {stock.product?.ColorName || '-'}</TableCell>
+                          <TableCell className="font-medium">
+                            {stock.isBody_only || stock.isLid_only ? (
+                              <span className="text-muted-foreground" title="Not counted as available stock as it's not a complete item">
+                                N/A
+                              </span>
+                            ) : (
+                              stock.availableQuantity
+                            )}
                           </TableCell>
-                          <TableCell className="font-medium">{stock.availableQuantity}</TableCell>
-                          <TableCell>{stock.qty_offer}</TableCell>
-                          <TableCell className="font-medium">{stock.total}</TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              {getStatusIcon(stock.status)}
-                              {getStatusBadge(stock.status)}
+                            {stock.isBody_only || stock.isLid_only ? (
+                              <span className="text-muted-foreground" title="Not counted in reservations as it's not a complete item">
+                                N/A
+                              </span>
+                            ) : (
+                              stock.qty_offer
+                            )}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {stock.isBody_only || stock.isLid_only ? (
+                              <span className="text-muted-foreground line-through" title="Excluded from total stock as it's not a complete item">
+                                {stock.total}
+                              </span>
+                            ) : (
+                              stock.total
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                {getStatusIcon(stock.status)}
+                                {getStatusBadge(stock.status)}
+                              </div>
+                              {(stock.isBody_only || stock.isLid_only || stock.isComplated_set) && (
+                                <div className="flex gap-1">
+                                  {stock.isBody_only && (
+                                    <Badge variant="outline" className="text-xs px-1 py-0">Body</Badge>
+                                  )}
+                                  {stock.isLid_only && (
+                                    <Badge variant="outline" className="text-xs px-1 py-0">Lid</Badge>
+                                  )}
+                                  {stock.isComplated_set && (
+                                    <Badge variant="outline" className="text-xs px-1 py-0">Set</Badge>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -980,7 +1022,7 @@ export default function EnhancedStockManagement() {
                                       <div>
                                         <Label>Product Information</Label>
                                         <div className="mt-2 space-y-2">
-                                          <div><strong>Collect Code:</strong> {stock.product?.ClientCode}</div>
+                                          <div><strong>Code:</strong> {stock.product?.ClientCode}</div>
                                           <div><strong>Design:</strong> {stock.product?.DesignName}</div>
                                           <div><strong>Name:</strong> {stock.product?.NameDesc}</div>
                                           <div><strong>Category:</strong> {stock.product?.CategoryName}</div>

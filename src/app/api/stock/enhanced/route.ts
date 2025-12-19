@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
         try {
           // Get product details from MySQL
           const productRows = await query(
-            `SELECT m.ID, m.CollectCode, m.DesignCode, m.NameCode, m.CategoryCode, 
+            `SELECT m.ID, m.ClientCode, m.DesignCode, m.NameCode, m.CategoryCode, 
                     m.SizeCode, m.ColorCode, m.TextureCode, m.MaterialCode, m.Photo1,
                     d.DesignName, n.NameDesc, c.CategoryName, co.ColorName, 
                     t.TextureName, s.SizeName, ma.MaterialName

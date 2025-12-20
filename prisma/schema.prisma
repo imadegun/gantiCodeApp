@@ -143,7 +143,7 @@ enum UserRole {
 enum ProductType {
   SINGLE_ITEM    // Tea cups, plates, etc. (standalone items)
   SET_PRODUCT    // Products that come as sets (e.g., tea pot with lid)
-  COMPONENT      // Spare parts, replacements (body only, lid only, etc.)
+  UNSET         // Spare parts, replacements (body only, lid only, etc.)
 }
 
 enum OfferStatus {

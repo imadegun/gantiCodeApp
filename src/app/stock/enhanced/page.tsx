@@ -28,7 +28,7 @@ interface StockItem {
   sizeCode?: string;
   materialCode?: string;
   photo1?: string;
-  productType: 'SINGLE_ITEM' | 'SET_PRODUCT' | 'COMPONENT';
+  productType: 'SINGLE_ITEM' | 'SET_PRODUCT' | 'UNSET';
   qty_in: number;
   qty_offer: number;
   total: number;
@@ -73,7 +73,7 @@ interface Warehouse {
 
 interface IncomingStock {
   productId: number;
-  productType: 'SINGLE_ITEM' | 'SET_PRODUCT' | 'COMPONENT';
+  productType: 'SINGLE_ITEM' | 'SET_PRODUCT' | 'UNSET';
   qty_in: number;
   isComplated_set: boolean;
   isBody_only: boolean;
@@ -532,6 +532,8 @@ export default function EnhancedStockManagement() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [warehouseFilter, setWarehouseFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [incomingStock, setIncomingStock] = useState<IncomingStock>({
     productId: 0,
     productType: 'SINGLE_ITEM',
@@ -618,9 +620,13 @@ export default function EnhancedStockManagement() {
       const response = await fetch(`/api/stock/enhanced?${params}`);
       const result = await response.json();
 
+      console.log('Stock API Response:', result);
+
       if (result.success) {
+        console.log('Stock data received:', result.data);
         setStockData(result.data);
       } else {
+        console.error('Stock API Error:', result.error);
         toast({
           title: 'Error',
           description: result.error || 'Failed to fetch stock data',
@@ -688,6 +694,8 @@ export default function EnhancedStockManagement() {
     }
 
     try {
+      console.log('Adding stock with data:', incomingStock);
+      
       const response = await fetch('/api/stock/enhanced', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -695,11 +703,12 @@ export default function EnhancedStockManagement() {
       });
 
       const result = await response.json();
+      console.log('Add Stock API Response:', result);
 
       if (result.success) {
         toast({
           title: 'Success',
-          description: `Added ${incomingStock.qty_in} units to stock`
+          description: `Successfully added ${incomingStock.qty_in} units to stock`
         });
         setIncomingStock({
           productId: 0,
@@ -719,6 +728,7 @@ export default function EnhancedStockManagement() {
         setSelectedClientCode('');
         fetchStockData();
       } else {
+        console.error('Add Stock API Error:', result.error);
         toast({
           title: 'Error',
           description: result.error || 'Failed to add stock',
@@ -733,6 +743,26 @@ export default function EnhancedStockManagement() {
         variant: 'destructive'
       });
     }
+  };
+
+  // Handle edit stock
+  const handleEditStock = (stock: StockItem) => {
+    // TODO: Implement edit functionality
+    toast({
+      title: 'Info',
+      description: 'Edit functionality coming soon',
+    });
+  };
+
+  // Handle delete stock
+  const handleDeleteStock = (stock: StockItem) => {
+    if (!confirm(`Are you sure you want to delete stock for ${stock.product?.ClientCode || 'this product'}?`)) return;
+    
+    // TODO: Implement delete functionality
+    toast({
+      title: 'Info',
+      description: 'Delete functionality coming soon',
+    });
   };
 
   // Get status badge
@@ -778,9 +808,9 @@ export default function EnhancedStockManagement() {
           icon: <Package className="h-4 w-4 text-purple-600" />,
           description: 'Product that comes as a set (e.g., tea pot with lid)'
         };
-      case 'COMPONENT':
+      case 'UNSET':
         return {
-          badge: <Badge className="bg-orange-100 text-orange-800">Component</Badge>,
+          badge: <Badge className="bg-orange-100 text-orange-800">Unset</Badge>,
           icon: <Package className="h-4 w-4 text-orange-600" />,
           description: 'Spare part or replacement component'
         };
@@ -799,10 +829,11 @@ export default function EnhancedStockManagement() {
       case 'SINGLE_ITEM':
         return stock.availableQuantity;
       case 'SET_PRODUCT':
-        // Only count complete sets as available stock
-        return stock.isComplated_set ? stock.availableQuantity : 0;
-      case 'COMPONENT':
-        // Components are not available for selling as complete products
+        // Set products are available as stock same as single products
+        // Only if unset product is not as available stock
+        return stock.availableQuantity;
+      case 'UNSET':
+        // Unset items are not available for selling as complete products
         return 0;
       default:
         return stock.availableQuantity;
@@ -882,10 +913,45 @@ export default function EnhancedStockManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-end">
-                <Button variant="outline" onClick={fetchStockData}>
-                  Refresh
-                </Button>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, stockData.length)} of {stockData.length} items
+                  </span>
+                  <Button variant="outline" size="sm" onClick={fetchStockData}>
+                    Refresh
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.ceil(stockData.length / itemsPerPage) }, (_, i) => (
+                      <Button
+                        key={i + 1}
+                        variant={currentPage === i + 1 ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(i + 1)}
+                      >
+                        {i + 1}
+                      </Button>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(Math.ceil(stockData.length / itemsPerPage), prev + 1))}
+                    disabled={currentPage === Math.ceil(stockData.length / itemsPerPage)}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -920,7 +986,7 @@ export default function EnhancedStockManagement() {
                         <TableHead>Type</TableHead>
                         <TableHead>Category</TableHead>
                         <TableHead>Size</TableHead>
-                        <TableHead>Texture</TableHead>
+                        {/* <TableHead>Texture</TableHead> */}
                         <TableHead>Color</TableHead>
                         <TableHead>Available</TableHead>
                         <TableHead>Reserved</TableHead>
@@ -932,12 +998,13 @@ export default function EnhancedStockManagement() {
                     </TableHeader>
                     <TableBody>
                       {stockData
-                        .filter(stock => 
-                          searchTerm === '' || 
+                        .filter(stock =>
+                          searchTerm === '' ||
                           stock.designCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           stock.clientCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (stock.product?.ClientCode?.toLowerCase().includes(searchTerm.toLowerCase()))
                         )
+                        .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
                         .map((stock) => (
                         <TableRow key={stock.id}>
                           <TableCell>
@@ -980,16 +1047,18 @@ export default function EnhancedStockManagement() {
                           <TableCell>
                             {stock.product?.SizeName || '-'}
                           </TableCell>
-                          <TableCell>
+                          {/* <TableCell>
                             {stock.product?.TextureName || '-'}
+                          </TableCell> */}
+                          <TableCell className="font-medium max-w-32 truncate" title={stock.product?.ColorName || '-'}>
+                            {stock.product?.ColorName || '-'}
                           </TableCell>
-                          <TableCell className="font-medium"> {stock.product?.ColorName || '-'}</TableCell>
                           <TableCell className="font-medium">
                             {getActualAvailableStock(stock)}
                           </TableCell>
                           <TableCell>
-                            {stock.productType === 'COMPONENT' ? (
-                              <span className="text-muted-foreground" title="Components are not reserved for offers">
+                            {stock.productType === 'UNSET' ? (
+                              <span className="text-muted-foreground" title="Unset items are not reserved for offers">
                                 N/A
                               </span>
                             ) : (
@@ -1109,9 +1178,9 @@ export default function EnhancedStockManagement() {
                                               Only complete sets are counted as available stock for selling
                                             </div>
                                           )}
-                                          {stock.productType === 'COMPONENT' && (
+                                          {stock.productType === 'UNSET' && (
                                             <div className="text-sm text-muted-foreground">
-                                              Components are not available for selling as complete products
+                                              Unset items are not available for selling as complete products
                                             </div>
                                           )}
                                         </div>
@@ -1132,6 +1201,20 @@ export default function EnhancedStockManagement() {
                                 onClick={() => window.open(`/products/${stock.productId}`, '_blank')}
                               >
                                 <Package className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEditStock(stock)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDeleteStock(stock)}
+                              >
+                                Delete
                               </Button>
                             </div>
                           </TableCell>
@@ -1159,16 +1242,16 @@ export default function EnhancedStockManagement() {
                   <Label htmlFor="productType">Product Type</Label>
                   <Select
                     value={incomingStock.productType}
-                    onValueChange={(value: 'SINGLE_ITEM' | 'SET_PRODUCT' | 'COMPONENT') =>
+                    onValueChange={(value: 'SINGLE_ITEM' | 'SET_PRODUCT' | 'UNSET') =>
                       setIncomingStock(prev => ({ ...prev, productType: value }))}
                   >
                     <SelectTrigger id="productType">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="SINGLE_ITEM">Single Item (e.g., tea cups, plates)</SelectItem>
-                      <SelectItem value="SET_PRODUCT">Set Product (e.g., tea pot with lid)</SelectItem>
-                      <SelectItem value="COMPONENT">Component (e.g., body only, lid only)</SelectItem>
+                      <SelectItem value="SINGLE_ITEM">Single</SelectItem>
+                      <SelectItem value="SET_PRODUCT">Set</SelectItem>
+                      <SelectItem value="UNSET">Unset</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

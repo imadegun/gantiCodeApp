@@ -82,7 +82,6 @@ interface IncomingStock {
   warehouseId?: string;
   shelfId?: string;
   notes?: string;
-  createdBy: string;
 }
 
 interface Product {
@@ -544,8 +543,7 @@ export default function EnhancedStockManagement() {
     expirationYears: 2,
     warehouseId: '',
     shelfId: '',
-    notes: '',
-    createdBy: 'current-user' // This should come from auth context
+    notes: ''
   });
   const [selectedStock, setSelectedStock] = useState<StockItem | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -553,6 +551,25 @@ export default function EnhancedStockManagement() {
   const [clientCodes, setClientCodes] = useState<ClientCode[]>([]);
   const [selectedDesign, setSelectedDesign] = useState<string>('');
   const [selectedClientCode, setSelectedClientCode] = useState<string>('');
+  const [editingStock, setEditingStock] = useState<StockItem | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    productType: 'SINGLE_ITEM' as 'SINGLE_ITEM' | 'SET_PRODUCT' | 'UNSET',
+    qty_in: 0,
+    isComplated_set: false,
+    isBody_only: false,
+    isLid_only: false,
+    expirationYears: 2,
+    warehouseId: '',
+    shelfId: '',
+    notes: ''
+  });
+  const [reservingStock, setReservingStock] = useState<StockItem | null>(null);
+  const [reserveFormData, setReserveFormData] = useState({
+    designCode: '',
+    quantity: 0,
+    notes: '',
+    expiryDays: 7
+  });
 
   // Fetch warehouses
   const fetchWarehouses = async () => {
@@ -606,6 +623,23 @@ export default function EnhancedStockManagement() {
       }
     } catch (error) {
       console.error('Error fetching client codes:', error);
+    }
+  };
+
+  // Check if stock already exists for a product
+  const checkExistingStock = async (productId: number) => {
+    try {
+      const response = await fetch(`/api/stock/enhanced?productId=${productId}`);
+      const result = await response.json();
+      if (result.success && result.data.length > 0) {
+        toast({
+          title: 'Stock Already Exists',
+          description: 'This product already has stock. You can add more quantity by editing the existing stock entry.',
+          variant: 'default'
+        });
+      }
+    } catch (error) {
+      // Ignore error, not critical
     }
   };
 
@@ -676,6 +710,8 @@ export default function EnhancedStockManagement() {
       setSelectedProduct(product || null);
       if (product) {
         setIncomingStock(prev => ({ ...prev, productId: product.ID }));
+        // Check if stock already exists for this product
+        checkExistingStock(product.ID);
       }
     } else {
       setSelectedProduct(null);
@@ -694,12 +730,28 @@ export default function EnhancedStockManagement() {
     }
 
     try {
+      // Get current user ID
+      const userResponse = await fetch('/api/auth/me');
+      const userResult = await userResponse.json();
+
+      if (!userResult.success || !userResult.data?.id) {
+        toast({
+          title: 'Authentication Required',
+          description: 'Please log in to add stock',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       console.log('Adding stock with data:', incomingStock);
-      
+
       const response = await fetch('/api/stock/enhanced', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(incomingStock)
+        body: JSON.stringify({
+          ...incomingStock,
+          createdBy: userResult.data.id
+        })
       });
 
       const result = await response.json();
@@ -720,8 +772,7 @@ export default function EnhancedStockManagement() {
           expirationYears: 2,
           warehouseId: '',
           shelfId: '',
-          notes: '',
-          createdBy: 'current-user'
+          notes: ''
         });
         setSelectedProduct(null);
         setSelectedDesign('');
@@ -747,22 +798,165 @@ export default function EnhancedStockManagement() {
 
   // Handle edit stock
   const handleEditStock = (stock: StockItem) => {
-    // TODO: Implement edit functionality
-    toast({
-      title: 'Info',
-      description: 'Edit functionality coming soon',
+    setEditingStock(stock);
+    setEditFormData({
+      productType: stock.productType,
+      qty_in: stock.qty_in,
+      isComplated_set: stock.isComplated_set,
+      isBody_only: stock.isBody_only,
+      isLid_only: stock.isLid_only,
+      expirationYears: stock.expirationYears,
+      warehouseId: stock.warehouseId || '',
+      shelfId: stock.shelfId || '',
+      notes: stock.notes || ''
     });
   };
 
-  // Handle delete stock
-  const handleDeleteStock = (stock: StockItem) => {
-    if (!confirm(`Are you sure you want to delete stock for ${stock.product?.ClientCode || 'this product'}?`)) return;
-    
-    // TODO: Implement delete functionality
-    toast({
-      title: 'Info',
-      description: 'Delete functionality coming soon',
+  // Handle save edit
+  const handleSaveEdit = async () => {
+    if (!editingStock) return;
+
+    try {
+      const response = await fetch(`/api/stock/enhanced?id=${editingStock.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editFormData)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Success',
+          description: 'Stock updated successfully'
+        });
+        setEditingStock(null);
+        fetchStockData();
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error,
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update stock',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Handle reserve stock
+  const handleReserveStock = (stock: StockItem) => {
+    setReservingStock(stock);
+    setReserveFormData({
+      designCode: stock.designCode,
+      quantity: 1,
+      notes: '',
+      expiryDays: 7
     });
+  };
+
+  // Handle save reservation
+  const handleSaveReservation = async () => {
+    if (!reservingStock) return;
+
+    if (reserveFormData.quantity <= 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please provide valid quantity',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      // Get current user for both clientId and createdBy
+      const userResponse = await fetch('/api/auth/me');
+      const userResult = await userResponse.json();
+
+      if (!userResult.success || !userResult.data?.id) {
+        toast({
+          title: 'Authentication Required',
+          description: 'Please log in to create reservations',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      const userId = userResult.data.id;
+
+      const response = await fetch('/api/stock/offers/enhanced', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stockId: reservingStock.id,
+          clientId: userId, // Use current user ID as client
+          quantity: reserveFormData.quantity,
+          notes: `${reserveFormData.designCode} - ${reserveFormData.notes || ''}`.trim(),
+          expiryDays: reserveFormData.expiryDays,
+          createdBy: userId
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Success',
+          description: 'Stock reservation created successfully'
+        });
+        setReservingStock(null);
+        fetchStockData();
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error,
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to create reservation',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Handle delete stock
+  const handleDeleteStock = async (stock: StockItem) => {
+    if (!confirm(`Are you sure you want to delete stock for ${stock.product?.ClientCode || 'this product'}?`)) return;
+
+    try {
+      const response = await fetch(`/api/stock/enhanced?id=${stock.id}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Success',
+          description: 'Stock deleted successfully'
+        });
+        fetchStockData();
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error,
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete stock',
+        variant: 'destructive'
+      });
+    }
   };
 
   // Get status badge
@@ -824,16 +1018,20 @@ export default function EnhancedStockManagement() {
   };
 
   // Calculate actual available stock based on product type
+  // Qty handling clarification:
+  // - SINGLE_ITEM: qty_in represents individual items, available = qty_in - qty_offer
+  // - SET_PRODUCT: qty_in represents number of complete sets (if isComplated_set=true) or components,
+  //   available = qty_in - qty_offer (in terms of sets)
+  // - UNSET: qty_in represents spare parts/components, available = 0 (not for direct sale)
   const getActualAvailableStock = (stock: StockItem) => {
     switch (stock.productType) {
       case 'SINGLE_ITEM':
-        return stock.availableQuantity;
+        return stock.availableQuantity; // Individual items available for sale
       case 'SET_PRODUCT':
-        // Set products are available as stock same as single products
-        // Only if unset product is not as available stock
-        return stock.availableQuantity;
+        // For set products, availability depends on whether it's a complete set
+        return stock.isComplated_set ? stock.availableQuantity : 0;
       case 'UNSET':
-        // Unset items are not available for selling as complete products
+        // Unset items (spare parts) are not available for selling as complete products
         return 0;
       default:
         return stock.availableQuantity;
@@ -1070,7 +1268,7 @@ export default function EnhancedStockManagement() {
                               <span>{stock.total}</span>
                               {stock.productType === 'SET_PRODUCT' && (
                                 <span className="text-xs text-muted-foreground">
-                                  Sets: {stock.isComplated_set ? stock.total : 0}
+                                  Complete Sets: {stock.isComplated_set ? stock.availableQuantity : 0}
                                 </span>
                               )}
                             </div>
@@ -1172,15 +1370,15 @@ export default function EnhancedStockManagement() {
                                           <div><strong>Total In:</strong> {stock.qty_in}</div>
                                           <div><strong>Reserved:</strong> {stock.qty_offer}</div>
                                           <div><strong>Available:</strong> {stock.availableQuantity}</div>
-                                          <div><strong>Actual Available:</strong> {getActualAvailableStock(stock)}</div>
+                                          <div><strong>Actual Available for Sale:</strong> {getActualAvailableStock(stock)}</div>
                                           {stock.productType === 'SET_PRODUCT' && (
                                             <div className="text-sm text-muted-foreground">
-                                              Only complete sets are counted as available stock for selling
+                                              Only complete sets (isComplated_set=true) are available for selling
                                             </div>
                                           )}
                                           {stock.productType === 'UNSET' && (
                                             <div className="text-sm text-muted-foreground">
-                                              Unset items are not available for selling as complete products
+                                              Unset items (spare parts) are not available for selling as complete products
                                             </div>
                                           )}
                                         </div>
@@ -1201,6 +1399,14 @@ export default function EnhancedStockManagement() {
                                 onClick={() => window.open(`/products/${stock.productId}`, '_blank')}
                               >
                                 <Package className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleReserveStock(stock)}
+                                disabled={stock.availableQuantity <= 0}
+                              >
+                                Reserve
                               </Button>
                               <Button
                                 size="sm"
@@ -1448,6 +1654,218 @@ export default function EnhancedStockManagement() {
           <BatchExpirationManager />
         </TabsContent>
       </Tabs>
+
+      {/* Edit Stock Dialog */}
+      <Dialog open={!!editingStock} onOpenChange={() => setEditingStock(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Stock Entry</DialogTitle>
+            <DialogDescription>
+              Update stock information for {editingStock?.product?.ClientCode}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label htmlFor="edit-productType">Product Type</Label>
+                <Select
+                  value={editFormData.productType}
+                  onValueChange={(value: 'SINGLE_ITEM' | 'SET_PRODUCT' | 'UNSET') =>
+                    setEditFormData(prev => ({ ...prev, productType: value }))}
+                >
+                  <SelectTrigger id="edit-productType">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SINGLE_ITEM">Single Item</SelectItem>
+                    <SelectItem value="SET_PRODUCT">Set Product</SelectItem>
+                    <SelectItem value="UNSET">Unset</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="edit-quantity">Add Quantity (will be added to existing stock)</Label>
+                <Input
+                  id="edit-quantity"
+                  type="number"
+                  min="0"
+                  value={editFormData.qty_in || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, qty_in: parseInt(e.target.value) || 0 }))}
+                  placeholder="Enter quantity to add"
+                />
+                {editingStock && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Current stock: {editingStock.qty_in} units
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="edit-expiration">Expiration Years</Label>
+                <Select
+                  value={editFormData.expirationYears?.toString() || '2'}
+                  onValueChange={(value) => setEditFormData(prev => ({ ...prev, expirationYears: parseInt(value) }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2">2 Years</SelectItem>
+                    <SelectItem value="5">5 Years</SelectItem>
+                    <SelectItem value="10">10 Years</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="edit-warehouse">Warehouse</Label>
+                <Select
+                  value={editFormData.warehouseId || 'none'}
+                  onValueChange={(value) => setEditFormData(prev => ({ ...prev, warehouseId: value === 'none' ? '' : value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select warehouse..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No warehouse</SelectItem>
+                    {warehouses.map((warehouse) => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name} ({warehouse.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex gap-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="edit-complete-set"
+                    checked={editFormData.isComplated_set}
+                    onCheckedChange={(checked) => setEditFormData(prev => ({ ...prev, isComplated_set: checked as boolean }))}
+                  />
+                  <Label htmlFor="edit-complete-set">Complete Set</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="edit-body-only"
+                    checked={editFormData.isBody_only}
+                    onCheckedChange={(checked) => setEditFormData(prev => ({ ...prev, isBody_only: checked as boolean }))}
+                  />
+                  <Label htmlFor="edit-body-only">Body Only</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="edit-lid-only"
+                    checked={editFormData.isLid_only}
+                    onCheckedChange={(checked) => setEditFormData(prev => ({ ...prev, isLid_only: checked as boolean }))}
+                  />
+                  <Label htmlFor="edit-lid-only">Lid Only</Label>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="edit-notes">Notes</Label>
+                <Textarea
+                  id="edit-notes"
+                  value={editFormData.notes || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Enter any notes about this stock entry..."
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditingStock(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit}>
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reserve Stock Dialog */}
+      <Dialog open={!!reservingStock} onOpenChange={() => setReservingStock(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reserve Stock</DialogTitle>
+            <DialogDescription>
+              Create a reservation for {reservingStock?.product?.ClientCode}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Design Code</Label>
+              <div className="mt-2 p-2 bg-muted rounded text-sm font-medium">
+                {reserveFormData.designCode}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="reserve-quantity">Quantity to Reserve</Label>
+              <Input
+                id="reserve-quantity"
+                type="number"
+                min="1"
+                max={reservingStock ? reservingStock.availableQuantity : 0}
+                value={reserveFormData.quantity || ''}
+                onChange={(e) => setReserveFormData(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
+              />
+              {reservingStock && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Available: {reservingStock.availableQuantity} units
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="reserve-expiry">Expiry Days</Label>
+              <Select
+                value={reserveFormData.expiryDays.toString()}
+                onValueChange={(value) => setReserveFormData(prev => ({ ...prev, expiryDays: parseInt(value) }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 Day</SelectItem>
+                  <SelectItem value="3">3 Days</SelectItem>
+                  <SelectItem value="7">7 Days</SelectItem>
+                  <SelectItem value="14">14 Days</SelectItem>
+                  <SelectItem value="30">30 Days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="reserve-notes">Notes</Label>
+              <Textarea
+                id="reserve-notes"
+                value={reserveFormData.notes}
+                onChange={(e) => setReserveFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Optional notes about this reservation"
+                rows={2}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setReservingStock(null)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveReservation}>
+                Create Reservation
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

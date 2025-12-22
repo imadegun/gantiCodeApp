@@ -13,9 +13,10 @@ export async function GET(request: NextRequest) {
     const expiring = searchParams.get('expiring'); // Get expiring stock (days)
 
     let whereClause: any = {};
-    
+
     if (warehouseId) whereClause.warehouseId = warehouseId;
     if (status) whereClause.status = status;
+    if (searchParams.get('productId')) whereClause.productId = parseInt(searchParams.get('productId')!);
     
     // Handle expiring stock filter
     if (expiring) {
@@ -148,26 +149,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find a valid user ID if createdBy is not provided or invalid
-    let validCreatedBy = createdBy;
-    if (!createdBy || createdBy === 'current-user') {
-      try {
-        const users = await prisma.user.findMany({ take: 1 });
-        if (users.length > 0) {
-          validCreatedBy = users[0].id;
-        } else {
-          return NextResponse.json(
-            { success: false, error: 'No users found in database' },
-            { status: 400 }
-          );
-        }
-      } catch (userError) {
-        console.error('Error finding users:', userError);
+    // Validate createdBy - must be a valid user ID
+    if (!createdBy) {
+      return NextResponse.json(
+        { success: false, error: 'Created by user ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Verify the user exists
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: createdBy },
+        select: { id: true }
+      });
+
+      if (!user) {
         return NextResponse.json(
-          { success: false, error: 'Failed to find valid user' },
-          { status: 500 }
+          { success: false, error: 'Invalid user ID provided' },
+          { status: 400 }
         );
       }
+    } catch (userError) {
+      console.error('Error validating user:', userError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to validate user' },
+        { status: 500 }
+      );
+    }
+
+    // Check if stock already exists for this product (unique by ClientCode/productId)
+    const existingStock = await prisma.stock.findFirst({
+      where: { productId: productId }
+    });
+
+    if (existingStock) {
+      return NextResponse.json(
+        { success: false, error: 'Stock entry already exists for this product. To add more stock, please find the existing entry in the stock overview and click "Edit" to update the quantity.' },
+        { status: 400 }
+      );
     }
 
     // Get product details from MySQL
@@ -231,7 +251,6 @@ export async function POST(request: NextRequest) {
         textureCode: product.TextureCode,
         materialCode: product.MaterialCode,
         photo1: product.Photo1,
-        productType: productType || 'SINGLE_ITEM',
         qty_in,
         total: qty_in,
         availableQuantity: qty_in,
@@ -243,7 +262,7 @@ export async function POST(request: NextRequest) {
         warehouseId,
         shelfId: validatedShelfId,
         notes,
-        createdBy: validCreatedBy,
+        createdBy,
         status: 'available'
       },
       include: {
@@ -281,6 +300,212 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json(
       { success: false, error: `Failed to create stock entry: ${errorMessage}` },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT /api/stock/enhanced - Update stock entry
+export async function PUT(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const stockId = searchParams.get('id');
+
+    if (!stockId) {
+      return NextResponse.json(
+        { success: false, error: 'Stock ID is required' },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json();
+    const {
+      productType,
+      qty_in,
+      isComplated_set,
+      isBody_only,
+      isLid_only,
+      expirationYears,
+      warehouseId,
+      shelfId,
+      notes
+    } = body;
+
+    // Get current stock entry
+    const currentStock = await prisma.stock.findUnique({
+      where: { id: stockId }
+    });
+
+    if (!currentStock) {
+      return NextResponse.json(
+        { success: false, error: 'Stock entry not found' },
+        { status: 404 }
+      );
+    }
+
+    // Validate shelfId if provided
+    let validatedShelfId = currentStock.shelfId;
+    if (shelfId !== undefined) {
+      if (shelfId && shelfId.trim() !== '') {
+        const shelfExists = await prisma.shelf.findUnique({
+          where: { id: shelfId }
+        });
+        validatedShelfId = shelfExists ? shelfId : null;
+      } else {
+        validatedShelfId = null;
+      }
+    }
+
+    // Calculate new expiration date if expirationYears changed
+    let expirationDate = currentStock.expirationDate;
+    if (expirationYears !== undefined && expirationYears !== currentStock.expirationYears) {
+      if (expirationYears && expirationYears > 0) {
+        expirationDate = new Date();
+        expirationDate.setFullYear(expirationDate.getFullYear() + expirationYears);
+      } else {
+        expirationDate = null;
+      }
+    }
+
+    // Calculate new total and available quantity
+    // When updating qty_in, add it to existing stock (for adding more stock)
+    const newQtyIn = qty_in !== undefined ? currentStock.qty_in + qty_in : currentStock.qty_in;
+    const newTotal = newQtyIn;
+    const newAvailableQuantity = newQtyIn - currentStock.qty_offer;
+
+    // Update stock entry
+    const updateData: any = {
+      qty_in: newQtyIn,
+      total: newTotal,
+      availableQuantity: newAvailableQuantity,
+      isComplated_set: isComplated_set !== undefined ? isComplated_set : currentStock.isComplated_set,
+      isBody_only: isBody_only !== undefined ? isBody_only : currentStock.isBody_only,
+      isLid_only: isLid_only !== undefined ? isLid_only : currentStock.isLid_only,
+      expirationYears: expirationYears !== undefined ? expirationYears : currentStock.expirationYears,
+      expirationDate,
+      warehouseId: warehouseId !== undefined ? warehouseId : currentStock.warehouseId,
+      shelfId: validatedShelfId,
+      notes: notes !== undefined ? notes : currentStock.notes,
+      updatedAt: new Date()
+    };
+
+    if (productType !== undefined) {
+      updateData.productType = productType;
+    }
+
+    const updatedStock = await prisma.stock.update({
+      where: { id: stockId },
+      data: updateData,
+      include: {
+        warehouse: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        shelf: {
+          select: {
+            id: true,
+            code: true,
+            row: true,
+            column: true,
+            level: true
+          }
+        }
+      }
+    });
+
+    // Get product details
+    const productRows = await query(
+      `SELECT m.ID, m.ClientCode, m.DesignCode, m.NameCode, m.CategoryCode,
+              m.SizeCode, m.ColorCode, m.TextureCode, m.MaterialCode, m.Photo1,
+              d.DesignName, n.NameDesc, c.CategoryName, co.ColorName,
+              t.TextureName, s.SizeName, ma.MaterialName
+       FROM tblcollect_master m
+       LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
+       LEFT JOIN tblcollect_name n ON m.NameCode = n.NameCode
+       LEFT JOIN tblcollect_category c ON m.CategoryCode = c.CategoryCode
+       LEFT JOIN tblcollect_color co ON m.ColorCode = co.ColorCode
+       LEFT JOIN tblcollect_texture t ON m.TextureCode = t.TextureCode
+       LEFT JOIN tblcollect_size s ON m.SizeCode = s.SizeCode
+       LEFT JOIN tblcollect_material ma ON m.MaterialCode = ma.MaterialCode
+       WHERE m.ID = ?`,
+      [updatedStock.productId]
+    ) as any[];
+
+    const product = productRows && productRows.length > 0 ? productRows[0] : null;
+
+    return NextResponse.json({
+      success: true,
+      data: { ...updatedStock, product },
+      message: 'Stock entry updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating stock entry:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json(
+      { success: false, error: `Failed to update stock entry: ${errorMessage}` },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/stock/enhanced - Delete stock entry
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const stockId = searchParams.get('id');
+
+    if (!stockId) {
+      return NextResponse.json(
+        { success: false, error: 'Stock ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Check if stock entry exists
+    const stock = await prisma.stock.findUnique({
+      where: { id: stockId },
+      include: {
+        offers: {
+          where: { status: 'pending' }
+        }
+      }
+    });
+
+    if (!stock) {
+      return NextResponse.json(
+        { success: false, error: 'Stock entry not found' },
+        { status: 404 }
+      );
+    }
+
+    // Check if there are pending offers
+    if (stock.offers.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Cannot delete stock entry with pending offers. Please resolve offers first.'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Delete stock entry
+    await prisma.stock.delete({
+      where: { id: stockId }
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Stock entry deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting stock entry:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json(
+      { success: false, error: `Failed to delete stock entry: ${errorMessage}` },
       { status: 500 }
     );
   }

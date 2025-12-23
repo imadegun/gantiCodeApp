@@ -121,8 +121,253 @@ interface ClientCode {
   ID: number;
 }
 
+interface Shelf {
+  id: string;
+  warehouseId: string;
+  code: string;
+  row?: string;
+  column?: string;
+  level?: string;
+  description?: string;
+  isActive: boolean;
+  warehouse: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  _count: {
+    stocks: number;
+  };
+}
+
+// Shelf Form Component
+function ShelfForm({ shelf, onSuccess, warehouses, setMessageDialog }: {
+  shelf?: Shelf;
+  onSuccess: () => void;
+  warehouses: Warehouse[];
+  setMessageDialog: (dialog: { open: boolean; title: string; message: string; type: 'success' | 'error' }) => void;
+}) {
+  const [formData, setFormData] = useState({
+    warehouseId: shelf?.warehouseId || '',
+    code: shelf?.code || '',
+    row: shelf?.row || '',
+    column: shelf?.column || '',
+    level: shelf?.level || '',
+    description: shelf?.description || ''
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const method = shelf ? 'PUT' : 'POST';
+      const body = shelf ? { id: shelf.id, ...formData } : formData;
+
+      const response = await fetch('/api/stock/shelves', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setMessageDialog({
+          open: true,
+          title: 'Success',
+          message: `Shelf ${shelf ? 'updated' : 'created'} successfully`,
+          type: 'success'
+        });
+        onSuccess();
+      } else {
+        setMessageDialog({
+          open: true,
+          title: 'Error',
+          message: result.error,
+          type: 'error'
+        });
+      }
+    } catch (error) {
+      setMessageDialog({
+        open: true,
+        title: 'Error',
+        message: 'Failed to save shelf',
+        type: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="warehouse">Warehouse *</Label>
+        <Select
+          value={formData.warehouseId}
+          onValueChange={(value) => setFormData(prev => ({ ...prev, warehouseId: value }))}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select warehouse..." />
+          </SelectTrigger>
+          <SelectContent>
+            {warehouses.map((warehouse) => (
+              <SelectItem key={warehouse.id} value={warehouse.id}>
+                {warehouse.name} ({warehouse.code})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="code">Code *</Label>
+          <Input
+            id="code"
+            value={formData.code}
+            onChange={(e) => setFormData(prev => ({ ...prev, code: e.target.value }))}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="row">Row</Label>
+          <Input
+            id="row"
+            value={formData.row}
+            onChange={(e) => setFormData(prev => ({ ...prev, row: e.target.value }))}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="column">Column</Label>
+          <Input
+            id="column"
+            value={formData.column}
+            onChange={(e) => setFormData(prev => ({ ...prev, column: e.target.value }))}
+          />
+        </div>
+        <div>
+          <Label htmlFor="level">Level</Label>
+          <Input
+            id="level"
+            value={formData.level}
+            onChange={(e) => setFormData(prev => ({ ...prev, level: e.target.value }))}
+          />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="description">Description</Label>
+        <Textarea
+          id="description"
+          value={formData.description}
+          onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+          rows={3}
+        />
+      </div>
+      <Button type="submit" disabled={loading}>
+        {loading ? 'Saving...' : (shelf ? 'Update' : 'Create')} Shelf
+      </Button>
+    </form>
+  );
+}
+
+// Shelf Card Component
+function ShelfCard({ shelf, onUpdate, onDelete, warehouses, setMessageDialog }: {
+  shelf: Shelf;
+  onUpdate: () => void;
+  onDelete: () => void;
+  warehouses: Warehouse[];
+  setMessageDialog: (dialog: { open: boolean; title: string; message: string; type: 'success' | 'error' }) => void;
+}) {
+  const handleDelete = async () => {
+    try {
+      const response = await fetch(`/api/stock/shelves?id=${shelf.id}`, {
+        method: 'DELETE'
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setMessageDialog({
+          open: true,
+          title: 'Success',
+          message: 'Shelf deleted successfully',
+          type: 'success'
+        });
+        onDelete();
+      } else {
+        setMessageDialog({
+          open: true,
+          title: 'Error',
+          message: result.error,
+          type: 'error'
+        });
+      }
+    } catch (error) {
+      setMessageDialog({
+        open: true,
+        title: 'Error',
+        message: 'Failed to delete shelf',
+        type: 'error'
+      });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg">{shelf.code}</CardTitle>
+            <CardDescription>{shelf.warehouse.name}</CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Edit Shelf</DialogTitle>
+                  <DialogDescription>
+                    Update shelf information
+                  </DialogDescription>
+                </DialogHeader>
+                <ShelfForm shelf={shelf} onSuccess={onUpdate} warehouses={warehouses} setMessageDialog={setMessageDialog} />
+              </DialogContent>
+            </Dialog>
+            <Button size="sm" variant="outline" onClick={handleDelete}>
+              <XCircle className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          <div><strong>Stock Items:</strong> {shelf._count.stocks}</div>
+          {shelf.row && <div><strong>Row:</strong> {shelf.row}</div>}
+          {shelf.column && <div><strong>Column:</strong> {shelf.column}</div>}
+          {shelf.level && <div><strong>Level:</strong> {shelf.level}</div>}
+          {shelf.description && (
+            <div className="text-sm text-muted-foreground">{shelf.description}</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Warehouse Form Component
-function WarehouseForm({ warehouse, onSuccess }: { warehouse?: Warehouse; onSuccess: () => void }) {
+function WarehouseForm({ warehouse, onSuccess, setMessageDialog }: {
+  warehouse?: Warehouse;
+  onSuccess: () => void;
+  setMessageDialog: (dialog: { open: boolean; title: string; message: string; type: 'success' | 'error' }) => void;
+}) {
   const [formData, setFormData] = useState({
     name: warehouse?.name || '',
     code: warehouse?.code || '',
@@ -148,23 +393,27 @@ function WarehouseForm({ warehouse, onSuccess }: { warehouse?: Warehouse; onSucc
       const result = await response.json();
 
       if (result.success) {
-        toast({
+        setMessageDialog({
+          open: true,
           title: 'Success',
-          description: `Warehouse ${warehouse ? 'updated' : 'created'} successfully`
+          message: `Warehouse ${warehouse ? 'updated' : 'created'} successfully`,
+          type: 'success'
         });
         onSuccess();
       } else {
-        toast({
+        setMessageDialog({
+          open: true,
           title: 'Error',
-          description: result.error,
-          variant: 'destructive'
+          message: result.error,
+          type: 'error'
         });
       }
     } catch (error) {
-      toast({
+      setMessageDialog({
+        open: true,
         title: 'Error',
-        description: 'Failed to save warehouse',
-        variant: 'destructive'
+        message: 'Failed to save warehouse',
+        type: 'error'
       });
     } finally {
       setLoading(false);
@@ -218,10 +467,11 @@ function WarehouseForm({ warehouse, onSuccess }: { warehouse?: Warehouse; onSucc
 }
 
 // Warehouse Card Component
-function WarehouseCard({ warehouse, onUpdate, onDelete }: {
+function WarehouseCard({ warehouse, onUpdate, onDelete, setMessageDialog }: {
   warehouse: Warehouse;
   onUpdate: () => void;
   onDelete: () => void;
+  setMessageDialog: (dialog: { open: boolean; title: string; message: string; type: 'success' | 'error' }) => void;
 }) {
   const [showShelves, setShowShelves] = useState(false);
 
@@ -279,7 +529,7 @@ function WarehouseCard({ warehouse, onUpdate, onDelete }: {
                     Update warehouse information
                   </DialogDescription>
                 </DialogHeader>
-                <WarehouseForm warehouse={warehouse} onSuccess={onUpdate} />
+                <WarehouseForm warehouse={warehouse} onSuccess={onUpdate} setMessageDialog={setMessageDialog} />
               </DialogContent>
             </Dialog>
             <Button size="sm" variant="outline" onClick={handleDelete}>
@@ -335,11 +585,19 @@ function BatchExpirationManager() {
   const [loading, setLoading] = useState(false);
   const [selectedStocks, setSelectedStocks] = useState<string[]>([]);
   const [newExpirationYears, setNewExpirationYears] = useState(2);
+  const [filterType, setFilterType] = useState<'expiring' | 'expired'>('expiring');
+  const [filterValue, setFilterValue] = useState(90);
 
-  const fetchBatchData = async (days = 90) => {
+  const fetchBatchData = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/stock/batch-expiration?days=${days}`);
+      const params = new URLSearchParams();
+      if (filterType === 'expiring') {
+        params.append('days', filterValue.toString());
+      } else {
+        params.append('yearsOld', filterValue.toString());
+      }
+      const response = await fetch(`/api/stock/batch-expiration?${params}`);
       const result = await response.json();
       if (result.success) {
         setBatchData(result.data);
@@ -353,7 +611,7 @@ function BatchExpirationManager() {
 
   useEffect(() => {
     fetchBatchData();
-  }, []);
+  }, [filterType, filterValue]);
 
   const handleBatchUpdate = async () => {
     if (selectedStocks.length === 0) {
@@ -447,33 +705,81 @@ function BatchExpirationManager() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Batch Expiration Management</h2>
-          <p className="text-muted-foreground">Identify and manage expiring stock in batches</p>
+          <p className="text-muted-foreground">Identify and manage expiring or expired stock in batches</p>
         </div>
         <Button onClick={() => fetchBatchData()} disabled={loading}>
           {loading ? 'Loading...' : 'Refresh Data'}
         </Button>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Filter Options</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4 items-end">
+            <div>
+              <Label>Filter Type</Label>
+              <Select
+                value={filterType}
+                onValueChange={(value: 'expiring' | 'expired') => setFilterType(value)}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="expiring">Expiring Within</SelectItem>
+                  <SelectItem value="expired">Older Than</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{filterType === 'expiring' ? 'Days' : 'Years'}</Label>
+              <Input
+                type="number"
+                value={filterValue}
+                onChange={(e) => setFilterValue(parseInt(e.target.value) || 0)}
+                className="w-24"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {batchData && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold text-red-600">{batchData.criticalCount}</div>
-              <p className="text-sm text-muted-foreground">Critical (≤7 days)</p>
+              <p className="text-sm text-muted-foreground">
+                {filterType === 'expiring' ? 'Critical (≤7 days)' : `${filterValue}+ Years Old`}
+              </p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold text-yellow-600">{batchData.warningCount}</div>
-              <p className="text-sm text-muted-foreground">Warning (7-30 days)</p>
+              <p className="text-sm text-muted-foreground">
+                {filterType === 'expiring' ? 'Warning (7-30 days)' : `${filterValue + 2}+ Years Old`}
+              </p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold text-blue-600">{batchData.upcomingCount}</div>
-              <p className="text-sm text-muted-foreground">Upcoming (30+ days)</p>
+              <p className="text-sm text-muted-foreground">
+                {filterType === 'expiring' ? 'Upcoming (30+ days)' : `${filterValue + 5}+ Years Old`}
+              </p>
             </CardContent>
           </Card>
+          {filterType === 'expiring' && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-2xl font-bold text-purple-600">{batchData.offersTotal || 0}</div>
+                <p className="text-sm text-muted-foreground">Expiring Offers</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -513,10 +819,61 @@ function BatchExpirationManager() {
 
       {batchData && (
         <div className="space-y-6">
-          {renderStockBatch(batchData.batches.critical, 'Critical Expiring (≤7 days)', 'text-red-600')}
-          {renderStockBatch(batchData.batches.warning, 'Warning Expiring (7-30 days)', 'text-yellow-600')}
-          {renderStockBatch(batchData.batches.upcoming, 'Upcoming Expiring (30+ days)', 'text-blue-600')}
+          {filterType === 'expiring' ? (
+            <>
+              {renderStockBatch(batchData.batches.critical, 'Critical Expiring (≤7 days)', 'text-red-600')}
+              {renderStockBatch(batchData.batches.warning, 'Warning Expiring (7-30 days)', 'text-yellow-600')}
+              {renderStockBatch(batchData.batches.upcoming, 'Upcoming Expiring (30+ days)', 'text-blue-600')}
+            </>
+          ) : (
+            <>
+              {renderStockBatch(batchData.batches.old, `${filterValue}+ Years Old`, 'text-red-600')}
+              {renderStockBatch(batchData.batches.older, `${filterValue + 2}+ Years Old`, 'text-yellow-600')}
+              {renderStockBatch(batchData.batches.very_old, `${filterValue + 5}+ Years Old`, 'text-blue-600')}
+            </>
+          )}
         </div>
+      )}
+
+      {batchData && filterType === 'expiring' && batchData.expiringOffers && batchData.expiringOffers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Expiring Reservations</CardTitle>
+            <CardDescription>Offers that will expire within {filterValue} days</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {batchData.expiringOffers.map((offer: any) => (
+                <div key={offer.id} className="flex items-center space-x-3 p-2 border rounded">
+                  <div className="flex-1">
+                    <div className="font-medium">{offer.product?.CollectCode || 'Unknown'}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {offer.product?.DesignName} - Expires: {offer.expiryDate ? new Date(offer.expiryDate).toLocaleDateString() : 'N/A'}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Reserved by: {offer.creator?.name || 'Unknown'} | Quantity: {offer.quantity}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      // Could add cancel offer functionality here
+                      setMessageDialog({
+                        open: true,
+                        title: 'Cancel Reservation',
+                        message: 'To cancel this reservation, please contact the user who created it.',
+                        type: 'error'
+                      });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
@@ -570,6 +927,14 @@ export default function EnhancedStockManagement() {
     notes: '',
     expiryDays: 7
   });
+  const [shelves, setShelves] = useState<Shelf[]>([]);
+  const [messageDialog, setMessageDialog] = useState<{ open: boolean; title: string; message: string; type: 'success' | 'error' }>({
+    open: false,
+    title: '',
+    message: '',
+    type: 'success'
+  });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; stock: StockItem | null }>({ open: false, stock: null });
 
   // Fetch warehouses
   const fetchWarehouses = async () => {
@@ -626,6 +991,19 @@ export default function EnhancedStockManagement() {
     }
   };
 
+  // Fetch shelves
+  const fetchShelves = async () => {
+    try {
+      const response = await fetch('/api/stock/shelves');
+      const result = await response.json();
+      if (result.success) {
+        setShelves(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching shelves:', error);
+    }
+  };
+
   // Check if stock already exists for a product
   const checkExistingStock = async (productId: number) => {
     try {
@@ -661,18 +1039,20 @@ export default function EnhancedStockManagement() {
         setStockData(result.data);
       } else {
         console.error('Stock API Error:', result.error);
-        toast({
+        setMessageDialog({
+          open: true,
           title: 'Error',
-          description: result.error || 'Failed to fetch stock data',
-          variant: 'destructive'
+          message: result.error || 'Failed to fetch stock data',
+          type: 'error'
         });
       }
     } catch (error) {
       console.error('Error fetching stock:', error);
-      toast({
+      setMessageDialog({
+        open: true,
         title: 'Error',
-        description: 'Failed to fetch stock data',
-        variant: 'destructive'
+        message: 'Failed to fetch stock data',
+        type: 'error'
       });
     } finally {
       setLoading(false);
@@ -683,6 +1063,7 @@ export default function EnhancedStockManagement() {
     fetchWarehouses();
     fetchProducts();
     fetchDesigns();
+    fetchShelves();
     fetchStockData();
   }, [statusFilter, warehouseFilter]);
 
@@ -719,48 +1100,58 @@ export default function EnhancedStockManagement() {
   }, [selectedDesign, selectedClientCode, products]);
 
   // Add incoming stock
-  const handleAddStock = async () => {
-    if (!incomingStock.productId || incomingStock.qty_in <= 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please select a product and enter valid quantity',
-        variant: 'destructive'
-      });
-      return;
-    }
+   const handleAddStock = async () => {
+     console.log('handleAddStock called', { selectedProduct, incomingStock });
+     if (!incomingStock.productId || incomingStock.qty_in <= 0) {
+       setMessageDialog({
+         open: true,
+         title: 'Validation Error',
+         message: 'Please select a product and enter valid quantity',
+         type: 'error'
+       });
+       return;
+     }
 
-    try {
-      // Get current user ID
-      const userResponse = await fetch('/api/auth/me');
-      const userResult = await userResponse.json();
+     try {
+       // Get current user ID
+       console.log('Fetching user...');
+       const userResponse = await fetch('/api/auth/me');
+       const userResult = await userResponse.json();
+       console.log('User result:', userResult);
 
-      if (!userResult.success || !userResult.data?.id) {
-        toast({
-          title: 'Authentication Required',
-          description: 'Please log in to add stock',
-          variant: 'destructive'
-        });
-        return;
-      }
+       if (!userResult.success || !userResult.data?.user?.id) {
+         setMessageDialog({
+           open: true,
+           title: 'Authentication Required',
+           message: 'Please log in to add stock',
+           type: 'error'
+         });
+         return;
+       }
 
-      console.log('Adding stock with data:', incomingStock);
+       console.log('Adding stock with data:', incomingStock);
+
+       const requestData = {
+         ...incomingStock,
+         createdBy: userResult.data.user.id
+       };
+      console.log('Request data:', requestData);
 
       const response = await fetch('/api/stock/enhanced', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...incomingStock,
-          createdBy: userResult.data.id
-        })
+        body: JSON.stringify(requestData)
       });
 
       const result = await response.json();
       console.log('Add Stock API Response:', result);
 
       if (result.success) {
-        toast({
+        setMessageDialog({
+          open: true,
           title: 'Success',
-          description: `Successfully added ${incomingStock.qty_in} units to stock`
+          message: `Successfully added ${incomingStock.qty_in} units to stock`,
+          type: 'success'
         });
         setIncomingStock({
           productId: 0,
@@ -780,37 +1171,39 @@ export default function EnhancedStockManagement() {
         fetchStockData();
       } else {
         console.error('Add Stock API Error:', result.error);
-        toast({
+        setMessageDialog({
+          open: true,
           title: 'Error',
-          description: result.error || 'Failed to add stock',
-          variant: 'destructive'
+          message: result.error || 'Failed to add stock',
+          type: 'error'
         });
       }
     } catch (error) {
       console.error('Error adding stock:', error);
-      toast({
+      setMessageDialog({
+        open: true,
         title: 'Error',
-        description: 'Failed to add stock',
-        variant: 'destructive'
+        message: 'Failed to add stock',
+        type: 'error'
       });
     }
   };
 
   // Handle edit stock
-  const handleEditStock = (stock: StockItem) => {
-    setEditingStock(stock);
-    setEditFormData({
-      productType: stock.productType,
-      qty_in: stock.qty_in,
-      isComplated_set: stock.isComplated_set,
-      isBody_only: stock.isBody_only,
-      isLid_only: stock.isLid_only,
-      expirationYears: stock.expirationYears,
-      warehouseId: stock.warehouseId || '',
-      shelfId: stock.shelfId || '',
-      notes: stock.notes || ''
-    });
-  };
+   const handleEditStock = (stock: StockItem) => {
+     setEditingStock(stock);
+     setEditFormData({
+       productType: stock.productType,
+       qty_in: stock.qty_in,
+       isComplated_set: stock.isComplated_set,
+       isBody_only: stock.isBody_only,
+       isLid_only: stock.isLid_only,
+       expirationYears: stock.expirationYears,
+       warehouseId: stock.warehouse?.id || '',
+       shelfId: stock.shelf?.id || '',
+       notes: stock.notes || ''
+     });
+   };
 
   // Handle save edit
   const handleSaveEdit = async () => {
@@ -826,24 +1219,28 @@ export default function EnhancedStockManagement() {
       const result = await response.json();
 
       if (result.success) {
-        toast({
+        setMessageDialog({
+          open: true,
           title: 'Success',
-          description: 'Stock updated successfully'
+          message: 'Stock updated successfully',
+          type: 'success'
         });
         setEditingStock(null);
         fetchStockData();
       } else {
-        toast({
+        setMessageDialog({
+          open: true,
           title: 'Error',
-          description: result.error,
-          variant: 'destructive'
+          message: result.error,
+          type: 'error'
         });
       }
     } catch (error) {
-      toast({
+      setMessageDialog({
+        open: true,
         title: 'Error',
-        description: 'Failed to update stock',
-        variant: 'destructive'
+        message: 'Failed to update stock',
+        type: 'error'
       });
     }
   };
@@ -864,10 +1261,11 @@ export default function EnhancedStockManagement() {
     if (!reservingStock) return;
 
     if (reserveFormData.quantity <= 0) {
-      toast({
+      setMessageDialog({
+        open: true,
         title: 'Validation Error',
-        description: 'Please provide valid quantity',
-        variant: 'destructive'
+        message: 'Please provide valid quantity',
+        type: 'error'
       });
       return;
     }
@@ -877,16 +1275,17 @@ export default function EnhancedStockManagement() {
       const userResponse = await fetch('/api/auth/me');
       const userResult = await userResponse.json();
 
-      if (!userResult.success || !userResult.data?.id) {
-        toast({
+      if (!userResult.success || !userResult.data?.user?.id) {
+        setMessageDialog({
+          open: true,
           title: 'Authentication Required',
-          description: 'Please log in to create reservations',
-          variant: 'destructive'
+          message: 'Please log in to create reservations',
+          type: 'error'
         });
         return;
       }
 
-      const userId = userResult.data.id;
+      const userId = userResult.data.user.id;
 
       const response = await fetch('/api/stock/offers/enhanced', {
         method: 'POST',
@@ -904,60 +1303,74 @@ export default function EnhancedStockManagement() {
       const result = await response.json();
 
       if (result.success) {
-        toast({
+        setMessageDialog({
+          open: true,
           title: 'Success',
-          description: 'Stock reservation created successfully'
+          message: 'Stock reservation created successfully',
+          type: 'success'
         });
         setReservingStock(null);
         fetchStockData();
       } else {
-        toast({
+        setMessageDialog({
+          open: true,
           title: 'Error',
-          description: result.error,
-          variant: 'destructive'
+          message: result.error,
+          type: 'error'
         });
       }
     } catch (error) {
-      toast({
+      setMessageDialog({
+        open: true,
         title: 'Error',
-        description: 'Failed to create reservation',
-        variant: 'destructive'
+        message: 'Failed to create reservation',
+        type: 'error'
       });
     }
   };
 
   // Handle delete stock
-  const handleDeleteStock = async (stock: StockItem) => {
-    if (!confirm(`Are you sure you want to delete stock for ${stock.product?.ClientCode || 'this product'}?`)) return;
+   const handleDeleteStock = (stock: StockItem) => {
+     setDeleteConfirm({ open: true, stock });
+   };
 
-    try {
-      const response = await fetch(`/api/stock/enhanced?id=${stock.id}`, {
-        method: 'DELETE'
-      });
+   const confirmDeleteStock = async () => {
+     if (!deleteConfirm.stock) return;
 
-      const result = await response.json();
+     try {
+       const response = await fetch(`/api/stock/enhanced?id=${deleteConfirm.stock.id}`, {
+         method: 'DELETE'
+       });
 
-      if (result.success) {
-        toast({
-          title: 'Success',
-          description: 'Stock deleted successfully'
-        });
-        fetchStockData();
-      } else {
-        toast({
-          title: 'Error',
-          description: result.error,
-          variant: 'destructive'
-        });
-      }
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to delete stock',
-        variant: 'destructive'
-      });
-    }
-  };
+       const result = await response.json();
+
+       if (result.success) {
+         setMessageDialog({
+           open: true,
+           title: 'Success',
+           message: 'Stock deleted successfully',
+           type: 'success'
+         });
+         fetchStockData();
+       } else {
+         setMessageDialog({
+           open: true,
+           title: 'Error',
+           message: result.error,
+           type: 'error'
+         });
+       }
+     } catch (error) {
+       setMessageDialog({
+         open: true,
+         title: 'Error',
+         message: 'Failed to delete stock',
+         type: 'error'
+       });
+     } finally {
+       setDeleteConfirm({ open: false, stock: null });
+     }
+   };
 
   // Get status badge
   const getStatusBadge = (status: string) => {
@@ -1054,10 +1467,11 @@ export default function EnhancedStockManagement() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Stock Overview</TabsTrigger>
           <TabsTrigger value="incoming">Add Stock</TabsTrigger>
           <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
+          <TabsTrigger value="shelves">Shelves</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
 
@@ -1439,7 +1853,7 @@ export default function EnhancedStockManagement() {
             <CardHeader>
               <CardTitle>Add Stock</CardTitle>
               <CardDescription>
-                Add new stock with warehouse and expiration tracking
+                Add new stock or increase quantity for existing products with warehouse and expiration tracking.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1631,7 +2045,7 @@ export default function EnhancedStockManagement() {
                     Create a new warehouse location
                   </DialogDescription>
                 </DialogHeader>
-                <WarehouseForm onSuccess={() => {
+                <WarehouseForm setMessageDialog={setMessageDialog} onSuccess={() => {
                   fetchWarehouses();
                 }} />
               </DialogContent>
@@ -1645,6 +2059,48 @@ export default function EnhancedStockManagement() {
                 warehouse={warehouse}
                 onUpdate={fetchWarehouses}
                 onDelete={fetchWarehouses}
+                setMessageDialog={setMessageDialog}
+              />
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="shelves" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Shelf Management</h2>
+              <p className="text-muted-foreground">Manage shelves within warehouses</p>
+            </div>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Shelf
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Shelf</DialogTitle>
+                  <DialogDescription>
+                    Create a new shelf location
+                  </DialogDescription>
+                </DialogHeader>
+                <ShelfForm warehouses={warehouses} setMessageDialog={setMessageDialog} onSuccess={() => {
+                  fetchShelves();
+                }} />
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {shelves.map((shelf) => (
+              <ShelfCard
+                key={shelf.id}
+                shelf={shelf}
+                onUpdate={fetchShelves}
+                onDelete={fetchShelves}
+                warehouses={warehouses}
+                setMessageDialog={setMessageDialog}
               />
             ))}
           </div>
@@ -1685,14 +2141,14 @@ export default function EnhancedStockManagement() {
               </div>
 
               <div>
-                <Label htmlFor="edit-quantity">Add Quantity (will be added to existing stock)</Label>
+                <Label htmlFor="edit-quantity">Quantity</Label>
                 <Input
                   id="edit-quantity"
                   type="number"
                   min="0"
                   value={editFormData.qty_in || ''}
                   onChange={(e) => setEditFormData(prev => ({ ...prev, qty_in: parseInt(e.target.value) || 0 }))}
-                  placeholder="Enter quantity to add"
+                  placeholder="Enter new quantity"
                 />
                 {editingStock && (
                   <p className="text-sm text-muted-foreground mt-1">
@@ -1863,6 +2319,53 @@ export default function EnhancedStockManagement() {
                 Create Reservation
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Message Dialog */}
+      <Dialog open={messageDialog.open} onOpenChange={(open) => setMessageDialog(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {messageDialog.type === 'success' ? (
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              ) : (
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              )}
+              {messageDialog.title}
+            </DialogTitle>
+            <DialogDescription>
+              {messageDialog.message}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button onClick={() => setMessageDialog(prev => ({ ...prev, open: false }))}>
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirm.open} onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              Confirm Delete
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete stock for {deleteConfirm.stock?.product?.ClientCode || 'this product'}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteConfirm({ open: false, stock: null })}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteStock}>
+              Delete
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

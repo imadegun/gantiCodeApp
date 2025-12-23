@@ -178,18 +178,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if stock already exists for this product (unique by ClientCode/productId)
-    const existingStock = await prisma.stock.findFirst({
-      where: { productId: productId }
-    });
-
-    if (existingStock) {
-      return NextResponse.json(
-        { success: false, error: 'Stock entry already exists for this product. To add more stock, please find the existing entry in the stock overview and click "Edit" to update the quantity.' },
-        { status: 400 }
-      );
-    }
-
     // Get product details from MySQL
     const productRows = await query(
       `SELECT DesignCode, ClientCode, NameCode, CategoryCode, SizeCode,
@@ -237,6 +225,61 @@ export async function POST(request: NextRequest) {
       console.log('No shelfId provided or empty');
     }
     console.log('Final validatedShelfId:', validatedShelfId);
+
+    // Check if stock already exists for this product (unique by ClientCode/productId)
+    const existingStock = await prisma.stock.findFirst({
+      where: { productId: productId }
+    });
+
+    if (existingStock) {
+      // Add to existing stock
+      const newQtyIn = existingStock.qty_in + qty_in;
+      const newTotal = newQtyIn;
+      const newAvailableQuantity = newQtyIn - existingStock.qty_offer;
+
+      const updatedStock = await prisma.stock.update({
+        where: { id: existingStock.id },
+        data: {
+          qty_in: newQtyIn,
+          total: newTotal,
+          availableQuantity: newAvailableQuantity,
+          // Update other fields if provided
+          ...(warehouseId !== undefined && { warehouseId }),
+          ...(validatedShelfId !== undefined && { shelfId: validatedShelfId }),
+          ...(notes !== undefined && { notes }),
+          ...(isComplated_set !== undefined && { isComplated_set }),
+          ...(isBody_only !== undefined && { isBody_only }),
+          ...(isLid_only !== undefined && { isLid_only }),
+          ...(expirationYears !== undefined && { expirationYears }),
+          ...(expirationDate !== undefined && { expirationDate }),
+          updatedAt: new Date()
+        },
+        include: {
+          warehouse: {
+            select: {
+              id: true,
+              name: true,
+              code: true
+            }
+          },
+          shelf: {
+            select: {
+              id: true,
+              code: true,
+              row: true,
+              column: true,
+              level: true
+            }
+          }
+        }
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: { ...updatedStock, product },
+        message: `Successfully added ${qty_in} units to existing stock. Total quantity now: ${newQtyIn}`
+      });
+    }
 
     // Create stock entry
     const stock = await prisma.stock.create({
@@ -368,8 +411,8 @@ export async function PUT(request: NextRequest) {
     }
 
     // Calculate new total and available quantity
-    // When updating qty_in, add it to existing stock (for adding more stock)
-    const newQtyIn = qty_in !== undefined ? currentStock.qty_in + qty_in : currentStock.qty_in;
+    // When updating qty_in, set to new value (standard editing)
+    const newQtyIn = qty_in !== undefined ? qty_in : currentStock.qty_in;
     const newTotal = newQtyIn;
     const newAvailableQuantity = newQtyIn - currentStock.qty_offer;
 

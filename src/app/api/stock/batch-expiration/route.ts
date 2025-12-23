@@ -4,24 +4,35 @@ import { query } from '@/lib/mysql';
 
 const prisma = new PrismaClient();
 
-// GET /api/stock/batch-expiration - Get stocks expiring within time batches
+// GET /api/stock/batch-expiration - Get stocks expiring within time batches or older than years
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get('days') || '30');
+    const yearsOld = parseInt(searchParams.get('yearsOld') || '0');
     const batchSize = parseInt(searchParams.get('batchSize') || '50');
 
-    const expirationDate = new Date();
-    expirationDate.setDate(expirationDate.getDate() + days);
+    let whereClause: any = { status: 'available' };
 
-    const expiringStocks = await prisma.stock.findMany({
-      where: {
-        expirationDate: {
-          lte: expirationDate,
-          gte: new Date() // Not already expired
-        },
-        status: 'available'
-      },
+    if (yearsOld > 0) {
+      // Stocks older than X years
+      const cutoffDate = new Date();
+      cutoffDate.setFullYear(cutoffDate.getFullYear() - yearsOld);
+      whereClause.createdAt = {
+        lte: cutoffDate
+      };
+    } else {
+      // Stocks expiring within X days
+      const expirationDate = new Date();
+      expirationDate.setDate(expirationDate.getDate() + days);
+      whereClause.expirationDate = {
+        lte: expirationDate,
+        gte: new Date() // Not already expired
+      };
+    }
+
+    const stocks = await prisma.stock.findMany({
+      where: whereClause,
       include: {
         warehouse: {
           select: { id: true, name: true, code: true }
@@ -30,13 +41,13 @@ export async function GET(request: NextRequest) {
           select: { id: true, code: true, row: true, column: true, level: true }
         }
       },
-      orderBy: { expirationDate: 'asc' },
+      orderBy: yearsOld > 0 ? { createdAt: 'asc' } : { expirationDate: 'asc' },
       take: batchSize
     });
 
     // Enrich with product data
     const enrichedStocks = await Promise.all(
-      expiringStocks.map(async (stock) => {
+      stocks.map(async (stock) => {
         try {
           const productRows = await query(
             `SELECT m.ID, m.CollectCode, m.DesignCode, m.NameCode, m.CategoryCode,
@@ -65,30 +76,112 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Group by expiration batches
-    const batches = {
-      critical: enrichedStocks.filter(stock =>
-        stock.expirationDate && stock.expirationDate <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-      ),
-      warning: enrichedStocks.filter(stock =>
-        stock.expirationDate &&
-        stock.expirationDate > new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) &&
-        stock.expirationDate <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      ),
-      upcoming: enrichedStocks.filter(stock =>
-        stock.expirationDate &&
-        stock.expirationDate > new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      )
-    };
+    // Get expiring offers if not in years mode
+    let expiringOffers: any[] = [];
+    if (yearsOld === 0) {
+      const offerExpirationDate = new Date();
+      offerExpirationDate.setDate(offerExpirationDate.getDate() + days);
+
+      const offers = await prisma.stockOffer.findMany({
+        where: {
+          status: 'pending',
+          expiryDate: {
+            lte: offerExpirationDate,
+            gte: new Date()
+          }
+        },
+        include: {
+          stock: {
+            include: {
+              warehouse: { select: { id: true, name: true, code: true } },
+              shelf: { select: { id: true, code: true, row: true, column: true, level: true } }
+            }
+          },
+          creator: { select: { id: true, name: true, username: true } }
+        },
+        orderBy: { expiryDate: 'asc' },
+        take: batchSize
+      });
+
+      // Enrich offers with product data
+      expiringOffers = await Promise.all(
+        offers.map(async (offer) => {
+          try {
+            const productRows = await query(
+              `SELECT m.ID, m.CollectCode, m.DesignCode, m.NameCode, m.CategoryCode,
+                      m.SizeCode, m.ColorCode, m.TextureCode, m.MaterialCode, m.ClientCode,
+                      d.DesignName, n.NameDesc, c.CategoryName
+               FROM tblcollect_master m
+               LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
+               LEFT JOIN tblcollect_name n ON m.NameCode = n.NameCode
+               LEFT JOIN tblcollect_category c ON m.CategoryCode = c.CategoryCode
+               WHERE m.ID = ?`,
+              [offer.stock.productId]
+            ) as any[];
+
+            const product = productRows && productRows.length > 0 ? productRows[0] : null;
+
+            return {
+              ...offer,
+              product
+            };
+          } catch (error) {
+            return {
+              ...offer,
+              product: null
+            };
+          }
+        })
+      );
+    }
+
+    let batches: any;
+
+    if (yearsOld > 0) {
+      // For older stocks, group by age
+      const now = new Date();
+      batches = {
+        old: enrichedStocks.filter(stock => {
+          const age = now.getFullYear() - stock.createdAt.getFullYear();
+          return age >= yearsOld;
+        }),
+        older: enrichedStocks.filter(stock => {
+          const age = now.getFullYear() - stock.createdAt.getFullYear();
+          return age >= yearsOld + 2;
+        }),
+        very_old: enrichedStocks.filter(stock => {
+          const age = now.getFullYear() - stock.createdAt.getFullYear();
+          return age >= yearsOld + 5;
+        })
+      };
+    } else {
+      // Group by expiration batches
+      batches = {
+        critical: enrichedStocks.filter(stock =>
+          stock.expirationDate && stock.expirationDate <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        ),
+        warning: enrichedStocks.filter(stock =>
+          stock.expirationDate &&
+          stock.expirationDate > new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) &&
+          stock.expirationDate <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        ),
+        upcoming: enrichedStocks.filter(stock =>
+          stock.expirationDate &&
+          stock.expirationDate > new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        )
+      };
+    }
 
     return NextResponse.json({
       success: true,
       data: {
         batches,
+        expiringOffers,
         total: enrichedStocks.length,
-        criticalCount: batches.critical.length,
-        warningCount: batches.warning.length,
-        upcomingCount: batches.upcoming.length
+        offersTotal: expiringOffers.length,
+        criticalCount: batches.critical?.length || batches.old?.length || 0,
+        warningCount: batches.warning?.length || batches.older?.length || 0,
+        upcomingCount: batches.upcoming?.length || batches.very_old?.length || 0
       }
     });
   } catch (error) {

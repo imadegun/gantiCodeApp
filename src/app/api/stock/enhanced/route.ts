@@ -96,10 +96,10 @@ export async function GET(request: NextRequest) {
           return {
             ...stock,
             product,
-            // Calculate available quantity
-            availableQuantity: stock.qty_in - stock.qty_offer,
+            // Use stored available quantity (updated in transactions)
+            availableQuantity: stock.availableQuantity,
             // Check if stock is expiring soon
-            isExpiringSoon: stock.expirationDate ? 
+            isExpiringSoon: stock.expirationDate ?
               new Date(stock.expirationDate) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : false
           };
         } catch (error) {
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
           return {
             ...stock,
             product: null,
-            availableQuantity: stock.qty_in - stock.qty_offer,
+            availableQuantity: stock.availableQuantity,
             isExpiringSoon: false
           };
         }
@@ -524,16 +524,10 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Check if there are pending offers
-    if (stock.offers.length > 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Cannot delete stock entry with pending offers. Please resolve offers first.'
-        },
-        { status: 400 }
-      );
-    }
+    // Delete all offers for this stock first (including cancelled/expired ones)
+    await prisma.stockOffer.deleteMany({
+      where: { stockId }
+    });
 
     // Delete stock entry
     await prisma.stock.delete({

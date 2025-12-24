@@ -580,7 +580,10 @@ function WarehouseCard({ warehouse, onUpdate, onDelete, setMessageDialog }: {
 }
 
 // Batch Expiration Manager Component
-function BatchExpirationManager() {
+function BatchExpirationManager({ setMessageDialog, fetchStockData }: {
+  setMessageDialog: (dialog: { open: boolean; title: string; message: string; type: 'success' | 'error' }) => void;
+  fetchStockData: () => void;
+}) {
   const [batchData, setBatchData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [selectedStocks, setSelectedStocks] = useState<string[]>([]);
@@ -666,39 +669,79 @@ function BatchExpirationManager() {
     );
   };
 
-  const renderStockBatch = (stocks: any[], title: string, color: string) => (
-    <Card>
-      <CardHeader>
-        <CardTitle className={`text-lg ${color}`}>{title}</CardTitle>
-        <CardDescription>{stocks.length} items</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {stocks.length === 0 ? (
-          <p className="text-muted-foreground">No items in this batch</p>
-        ) : (
-          <div className="space-y-2">
-            {stocks.map((stock) => (
-              <div key={stock.id} className="flex items-center space-x-3 p-2 border rounded">
-                <Checkbox
-                  checked={selectedStocks.includes(stock.id)}
-                  onCheckedChange={() => toggleStockSelection(stock.id)}
-                />
-                <div className="flex-1">
-                  <div className="font-medium">{stock.product?.CollectCode || 'Unknown'}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {stock.product?.DesignName} - Expires: {stock.expirationDate ? new Date(stock.expirationDate).toLocaleDateString() : 'N/A'}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Warehouse: {stock.warehouse?.name || 'N/A'} | Available: {stock.availableQuantity}
+  const handleCancelOffer = async (offerId: string) => {
+    try {
+      const response = await fetch('/api/stock/offers/enhanced', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offerId, action: 'cancel' })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setMessageDialog({
+          open: true,
+          title: 'Success',
+          message: result.message || 'Reservation cancelled successfully. Stock has been returned.',
+          type: 'success'
+        });
+        fetchBatchData(); // Refresh the batch data
+        fetchStockData(); // Refresh the main stock list
+      } else {
+        setMessageDialog({
+          open: true,
+          title: 'Error',
+          message: result.error || 'Failed to cancel reservation',
+          type: 'error'
+        });
+      }
+    } catch (error) {
+      setMessageDialog({
+        open: true,
+        title: 'Error',
+        message: 'Failed to cancel reservation',
+        type: 'error'
+      });
+    }
+  };
+
+  const renderStockBatch = (stocks: any[], title: string, color: string) => {
+    if (!stocks) stocks = [];
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className={`text-lg ${color}`}>{title}</CardTitle>
+          <CardDescription>{stocks.length} items</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {stocks.length === 0 ? (
+            <p className="text-muted-foreground">No items in this batch</p>
+          ) : (
+            <div className="space-y-2">
+              {stocks.map((stock) => (
+                <div key={stock.id} className="flex items-center space-x-3 p-2 border rounded">
+                  <Checkbox
+                    checked={selectedStocks.includes(stock.id)}
+                    onCheckedChange={() => toggleStockSelection(stock.id)}
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium">{stock.product?.CollectCode || 'Unknown'}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {stock.product?.DesignName} - Expires: {stock.expirationDate ? new Date(stock.expirationDate).toLocaleDateString() : 'N/A'}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Warehouse: {stock.warehouse?.name || 'N/A'} | Available: {stock.availableQuantity}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -857,15 +900,7 @@ function BatchExpirationManager() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {
-                      // Could add cancel offer functionality here
-                      setMessageDialog({
-                        open: true,
-                        title: 'Cancel Reservation',
-                        message: 'To cancel this reservation, please contact the user who created it.',
-                        type: 'error'
-                      });
-                    }}
+                    onClick={() => handleCancelOffer(offer.id)}
                   >
                     Cancel
                   </Button>
@@ -2107,7 +2142,7 @@ export default function EnhancedStockManagement() {
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-6">
-          <BatchExpirationManager />
+          <BatchExpirationManager setMessageDialog={setMessageDialog} fetchStockData={fetchStockData} />
         </TabsContent>
       </Tabs>
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient, OfferStatus } from '@prisma/client';
+import { PrismaClient, OfferStatus, StockStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -242,7 +242,7 @@ export async function PUT(request: NextRequest) {
       });
 
       // For reject, cancel, or expire - return stock to available
-      if (['rejected', 'cancelled', 'expired'].includes(action)) {
+      if (['reject', 'cancel', 'expire'].includes(action)) {
         const updatedStock = await tx.stock.update({
           where: { id: offer.stockId },
           data: {
@@ -251,20 +251,20 @@ export async function PUT(request: NextRequest) {
           }
         });
 
-        // Update stock status if needed
-        let newStockStatus = 'available';
+        // Update stock status based on the new available quantity
+        let newStockStatus: StockStatus = 'available';
         if (updatedStock.availableQuantity === 0) {
           newStockStatus = 'out_of_stock';
         } else if (updatedStock.availableQuantity <= 5) {
           newStockStatus = 'low_stock';
         }
 
-        await tx.stock.update({
+        const finalStock = await tx.stock.update({
           where: { id: offer.stockId },
           data: { status: newStockStatus }
         });
 
-        return { offer: updatedOffer, stock: updatedStock };
+        return { offer: updatedOffer, stock: finalStock };
       }
 
       // For approved - just reduce the qty_in permanently

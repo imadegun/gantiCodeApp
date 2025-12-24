@@ -8,8 +8,8 @@ const prisma = new PrismaClient();
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const days = parseInt(searchParams.get('days') || '30');
-    const yearsOld = parseInt(searchParams.get('yearsOld') || '0');
+    const days = parseInt(searchParams.get('days') || '0'); // Default to 0 to prioritize yearsOld
+    const yearsOld = parseInt(searchParams.get('yearsOld') || '2'); // Default to 2 years
     const batchSize = parseInt(searchParams.get('batchSize') || '50');
 
     let whereClause: any = { status: 'available' };
@@ -76,64 +76,8 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Get expiring offers if not in years mode
-    let expiringOffers: any[] = [];
-    if (yearsOld === 0) {
-      const offerExpirationDate = new Date();
-      offerExpirationDate.setDate(offerExpirationDate.getDate() + days);
-
-      const offers = await prisma.stockOffer.findMany({
-        where: {
-          status: 'pending',
-          expiryDate: {
-            lte: offerExpirationDate,
-            gte: new Date()
-          }
-        },
-        include: {
-          stock: {
-            include: {
-              warehouse: { select: { id: true, name: true, code: true } },
-              shelf: { select: { id: true, code: true, row: true, column: true, level: true } }
-            }
-          },
-          creator: { select: { id: true, name: true, username: true } }
-        },
-        orderBy: { expiryDate: 'asc' },
-        take: batchSize
-      });
-
-      // Enrich offers with product data
-      expiringOffers = await Promise.all(
-        offers.map(async (offer) => {
-          try {
-            const productRows = await query(
-              `SELECT m.ID, m.CollectCode, m.DesignCode, m.NameCode, m.CategoryCode,
-                      m.SizeCode, m.ColorCode, m.TextureCode, m.MaterialCode, m.ClientCode,
-                      d.DesignName, n.NameDesc, c.CategoryName
-               FROM tblcollect_master m
-               LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
-               LEFT JOIN tblcollect_name n ON m.NameCode = n.NameCode
-               LEFT JOIN tblcollect_category c ON m.CategoryCode = c.CategoryCode
-               WHERE m.ID = ?`,
-              [offer.stock.productId]
-            ) as any[];
-
-            const product = productRows && productRows.length > 0 ? productRows[0] : null;
-
-            return {
-              ...offer,
-              product
-            };
-          } catch (error) {
-            return {
-              ...offer,
-              product: null
-            };
-          }
-        })
-      );
-    }
+    // Reservation notifications have been replaced by the reservations page
+    // No longer fetching expiring offers
 
     let batches: any;
 
@@ -176,9 +120,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         batches,
-        expiringOffers,
         total: enrichedStocks.length,
-        offersTotal: expiringOffers.length,
         criticalCount: batches.critical?.length || batches.old?.length || 0,
         warningCount: batches.warning?.length || batches.older?.length || 0,
         upcomingCount: batches.upcoming?.length || batches.very_old?.length || 0

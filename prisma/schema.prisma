@@ -85,7 +85,6 @@ model User {
 
   // Relations
   stockEntries StockEntry[]
-  stockOffers  StockOffer[]
   stocks       Stock[]
 
   @@map("users")
@@ -282,19 +281,18 @@ model StockNotification {
 model StockOffer {
   id           String      @id @default(cuid())
   stockId      String
-  clientId     String // Client being offered to
+  clientCode   String // ClientCode being offered to
   quantity     Int
   status       OfferStatus @default(pending)
   offerDate    DateTime    @default(now())
   expiryDate   DateTime // When offer expires
   notes        String?
-  createdBy    String
+  offeredBy    String // DesignCode who is offering
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
   // Relations
-  stock   Stock @relation(fields: [stockId], references: [id])
-  creator User  @relation(fields: [createdBy], references: [id])
+  stock Stock @relation(fields: [stockId], references: [id])
 
   @@map("stock_offers")
 }

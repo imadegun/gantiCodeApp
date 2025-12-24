@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient, OfferStatus, StockStatus } from '@prisma/client';
+import { query } from '@/lib/mysql';
 
 const prisma = new PrismaClient();
 
@@ -9,10 +10,27 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as OfferStatus | null;
     const stockId = searchParams.get('stockId');
-
+    const clientId = searchParams.get('clientId');
+    const search = searchParams.get('search');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+    
     let whereClause: any = {};
+    
     if (status) whereClause.status = status;
     if (stockId) whereClause.stockId = stockId;
+    if (clientId) whereClause.clientId = clientId;
+    
+    // Add search functionality
+    if (search) {
+      whereClause.OR = [
+        { clientId: { contains: search, mode: 'insensitive' } },
+        { stock: { designCode: { contains: search, mode: 'insensitive' } } },
+        { stock: { clientCode: { contains: search, mode: 'insensitive' } } },
+        { stock: { nameCode: { contains: search, mode: 'insensitive' } } },
+        { stock: { productId: { equals: parseInt(search) || 0 } } },
+      ];
+    }
 
     const offers = await prisma.stockOffer.findMany({
       where: whereClause,
@@ -45,10 +63,24 @@ export async function GET(request: NextRequest) {
           }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
 
-    return NextResponse.json({ success: true, data: offers });
+    // Get total count for pagination
+    const totalCount = await prisma.stockOffer.count({ where: whereClause });
+
+    return NextResponse.json({ 
+      success: true, 
+      data: offers,
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit)
+      }
+    });
   } catch (error) {
     console.error('Error fetching stock offers:', error);
     return NextResponse.json(

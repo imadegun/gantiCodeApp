@@ -119,7 +119,12 @@ export default function StockManagement() {
   const [activeTab, setActiveTab] = useState('overview');
   const [stockType, setStockType] = useState<'all' | 'clientcode' | 'designcode'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [incomingStock, setIncomingStock] = useState<IncomingStock>({
+  const [incomingStock, setIncomingStock] = useState<{
+    type: 'clientcode' | 'designcode';
+    code: string;
+    quantity: number;
+    source: string;
+  }>({
     type: 'clientcode',
     code: '',
     quantity: 0,
@@ -131,6 +136,74 @@ export default function StockManagement() {
     stock: StockItem | null;
     action: 'offer' | 'confirm_sale' | 'cancel_offer' | null;
   }>({ open: false, stock: null, action: null });
+  
+  const [cancelOfferDialog, setCancelOfferDialog] = useState<{
+    open: boolean;
+    offerId: string | null;
+    stockId: string | null;
+    clientId: string | null;
+    quantity: number | null;
+  }>({ open: false, offerId: null, stockId: null, clientId: null, quantity: null });
+  
+  const [cancelReason, setCancelReason] = useState('');
+
+  // Function to get pending offers for a stock item
+  const getPendingOffers = async (stockId: string) => {
+    try {
+      const response = await fetch(`/api/stock/offers/enhanced?stockId=${stockId}&status=pending`);
+      const result = await response.json();
+      
+      if (result.success) {
+        return result.data;
+      }
+      return [];
+    } catch (error) {
+      console.error('Error fetching pending offers:', error);
+      return [];
+    }
+  };
+
+  // Function to cancel an offer
+  const handleCancelOffer = async () => {
+    if (!cancelOfferDialog.offerId) return;
+    
+    try {
+      const response = await fetch('/api/stock/offers/enhanced', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          offerId: cancelOfferDialog.offerId,
+          action: 'cancel',
+          reason: cancelReason
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast({
+          title: 'Success',
+          description: result.message
+        });
+        setCancelOfferDialog({ open: false, offerId: null, stockId: null, clientId: null, quantity: null });
+        setCancelReason('');
+        fetchStockData(); // Refresh the stock data
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error || 'Failed to cancel offer',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      console.error('Error cancelling offer:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to cancel offer',
+        variant: 'destructive'
+      });
+    }
+  };
 
   // Fetch stock data
   const fetchStockData = async () => {
@@ -223,12 +296,32 @@ export default function StockManagement() {
     if (!quantityNum || quantityNum <= 0) return;
 
     try {
+      // For the enhanced stock system, we should use the offers API for reservations
+      if (action === 'cancel_offer') {
+        // Get pending offers for this stock
+        const offers = await getPendingOffers(stock.id);
+        if (offers.length > 0) {
+          // Set the first pending offer for cancellation dialog
+          const offer = offers[0];
+          setCancelOfferDialog({
+            open: true,
+            offerId: offer.id,
+            stockId: stock.id,
+            clientId: offer.clientId,
+            quantity: offer.quantity
+          });
+          setActionDialog({ open: false, stock: null, action: null });
+          return;
+        }
+      }
+      
+      // For other actions, we'll use the original API
       const response = await fetch('/api/stock', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: stock.type,
-          code: stock.code,
+          type: stock.designCode ? 'designcode' : 'clientcode', // Use designCode as type indicator
+          code: stock.designCode || stock.clientCode, // Use appropriate code
           action: action,
           quantity: quantityNum
         })
@@ -290,19 +383,11 @@ export default function StockManagement() {
 
   // Get quantity display
   const getQuantityDisplay = (stock: StockItem) => {
-    if (stock.type === 'clientcode') {
-      return {
-        available: stock.quantityAvailable || 0,
-        reserved: stock.quantityReserved || 0,
-        total: (stock.quantityAvailable || 0) + (stock.quantityReserved || 0)
-      };
-    } else {
-      return {
-        available: stock.availableQuantity || 0,
-        reserved: stock.reservedQuantity || 0,
-        total: stock.totalQuantity || 0
-      };
-    }
+    return {
+      available: stock.availableQuantity || 0,
+      reserved: stock.qty_offer || 0, // qty_offer represents reserved quantity
+      total: stock.total || 0
+    };
   };
 
   return (
@@ -411,28 +496,19 @@ export default function StockManagement() {
                         <TableRow key={stock.id}>
                           <TableCell>
                             <Badge variant="outline">
-                              {stock.type === 'clientcode' ? 'ClientCode' : 'DesignCode'}
+                              {stock.clientCode ? 'ClientCode' : 'DesignCode'}
                             </Badge>
                           </TableCell>
-                          <TableCell className="font-medium">{stock.code}</TableCell>
+                          <TableCell className="font-medium">{stock.clientCode || stock.designCode}</TableCell>
                           <TableCell>
                             {stock.product ? (
                               <div className="text-sm">
-                                {stock.type === 'clientcode' ? (
-                                  <>
-                                    <div>{stock.product.CollectCode}</div>
-                                    <div className="text-muted-foreground">
-                                      {stock.product.DesignCode} - {stock.product.NameCode}
-                                    </div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div>{stock.product.DesignName}</div>
-                                    <div className="text-muted-foreground">
-                                      {stock.product.productCount} products
-                                    </div>
-                                  </>
-                                )}
+                                <>
+                                  <div>{stock.product?.DesignName || stock.designCode}</div>
+                                  <div className="text-muted-foreground">
+                                    {stock.product?.DesignCode || stock.clientCode}
+                                  </div>
+                                </>
                               </div>
                             ) : (
                               <span className="text-muted-foreground">No product info</span>
@@ -448,7 +524,7 @@ export default function StockManagement() {
                             </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {new Date(stock.lastUpdated).toLocaleDateString()}
+                            {new Date(stock.updatedAt).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-2">
@@ -465,7 +541,7 @@ export default function StockManagement() {
                                 <DialogContent className="max-w-2xl">
                                   <DialogHeader>
                                     <DialogTitle>
-                                      Stock Details - {stock.code}
+                                      Stock Details - {stock.designCode || stock.clientCode}
                                     </DialogTitle>
                                     <DialogDescription>
                                       Detailed information and actions for this stock item
@@ -475,11 +551,11 @@ export default function StockManagement() {
                                     <div className="grid grid-cols-2 gap-4">
                                       <div>
                                         <Label>Type</Label>
-                                        <p className="text-sm">{stock.type}</p>
+                                        <p className="text-sm">{stock.clientCode ? 'ClientCode' : 'DesignCode'}</p>
                                       </div>
                                       <div>
                                         <Label>Code</Label>
-                                        <p className="text-sm">{stock.code}</p>
+                                        <p className="text-sm">{stock.clientCode || stock.designCode}</p>
                                       </div>
                                       <div>
                                         <Label>Available Quantity</Label>
@@ -650,7 +726,7 @@ export default function StockManagement() {
           <DialogHeader>
             <DialogTitle>Stock Action</DialogTitle>
             <DialogDescription>
-              Confirm {actionDialog.action} for {actionDialog.stock?.code}
+              Confirm {actionDialog.action} for {actionDialog.stock?.designCode || actionDialog.stock?.clientCode}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -667,6 +743,68 @@ export default function StockManagement() {
               <Button
                 variant="outline"
                 onClick={() => setActionDialog({ open: false, stock: null, action: null })}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Cancel Offer Dialog */}
+      <Dialog open={cancelOfferDialog.open} onOpenChange={(open) => {
+        if (!open) {
+          setCancelOfferDialog({ open: false, offerId: null, stockId: null, clientId: null, quantity: null });
+          setCancelReason('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Reservation</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel this reservation? This will return {cancelOfferDialog.quantity} units to available stock.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Stock ID</Label>
+                <p className="text-sm">{cancelOfferDialog.stockId}</p>
+              </div>
+              <div>
+                <Label>Client ID</Label>
+                <p className="text-sm">{cancelOfferDialog.clientId}</p>
+              </div>
+              <div>
+                <Label>Quantity</Label>
+                <p className="text-sm">{cancelOfferDialog.quantity}</p>
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="cancelReason">Reason (Optional)</Label>
+              <Textarea
+                id="cancelReason"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Enter reason for cancellation..."
+              />
+            </div>
+            
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleCancelOffer} 
+                className="flex-1 bg-red-600 hover:bg-red-700"
+              >
+                Confirm Cancel
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCancelOfferDialog({ open: false, offerId: null, stockId: null, clientId: null, quantity: null });
+                  setCancelReason('');
+                }}
                 className="flex-1"
               >
                 Cancel

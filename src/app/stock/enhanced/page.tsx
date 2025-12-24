@@ -588,8 +588,8 @@ function BatchExpirationManager({ setMessageDialog, fetchStockData }: {
   const [loading, setLoading] = useState(false);
   const [selectedStocks, setSelectedStocks] = useState<string[]>([]);
   const [newExpirationYears, setNewExpirationYears] = useState(2);
-  const [filterType, setFilterType] = useState<'expiring' | 'expired'>('expiring');
-  const [filterValue, setFilterValue] = useState(90);
+  const [filterType, setFilterType] = useState<'expiring' | 'expired'>('expired');
+  const [filterValue, setFilterValue] = useState(2);
 
   const fetchBatchData = async () => {
     setLoading(true);
@@ -1507,7 +1507,7 @@ export default function EnhancedStockManagement() {
           <TabsTrigger value="incoming">Add Stock</TabsTrigger>
           <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
           <TabsTrigger value="shelves">Shelves</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="notifications">Expiring Stock</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">

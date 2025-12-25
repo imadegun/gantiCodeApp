@@ -7,13 +7,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     if (!id) {
       return NextResponse.json(
-        { success: false, error: 'Product ID is required' },
+        { success: false, error: 'Product ID or DesignCode is required' },
         { status: 400 }
       );
     }
 
+    // Determine if the parameter is an ID (numeric) or DesignCode (alphanumeric)
+    const isNumericId = !isNaN(Number(id));
+    
     // Get main product details with all related material and tool information
-    const productSql = `
+    let productSql = `
       SELECT
         tm.*,
         td.DesignName,
@@ -97,10 +100,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       LEFT JOIN tbllustre lst3 ON tm.Lustre3 = lst3.ID
       LEFT JOIN tbllustre lst4 ON tm.Lustre4 = lst4.ID
       LEFT JOIN tblunit tbu ON tm.unit = tbu.UnitID
-      WHERE tm.ID = ?
     `;
+    
+    let productResult;
+    let whereClause;
+    let queryParams;
+    
+    if (isNumericId) {
+      // If it's numeric, treat as ID
+      whereClause = "WHERE tm.ID = ?";
+      queryParams = [id];
+    } else {
+      // If it's not numeric, treat as DesignCode
+      whereClause = "WHERE tm.DesignCode = ? ORDER BY tm.ID ASC LIMIT 1";  // Get the first product with this DesignCode
+      queryParams = [id];
+    }
+    
+    productSql += whereClause;
 
-    const productResult = await query(productSql, [id]) as any[];
+    productResult = await query(productSql, queryParams) as any[];
 
     if (productResult.length === 0) {
       return NextResponse.json(
@@ -125,7 +143,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       LIMIT 10
     `;
 
-    const relatedResult = await query(relatedSql, [product.DesignCode, product.CategoryCode, product.SizeCode, id]) as any[];
+    const relatedResult = await query(relatedSql, [product.DesignCode, product.CategoryCode, product.SizeCode, product.ID]) as any[];
 
     return NextResponse.json({
       success: true,

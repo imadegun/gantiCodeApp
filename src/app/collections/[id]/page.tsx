@@ -832,7 +832,7 @@ export default function ProductDetailPage() {
       </div>
       
       {/* Image Modal */}
-      {isImageModalOpen && (
+      {isImageModalOpen && modalImageUrl && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
           onClick={closeImageModal}

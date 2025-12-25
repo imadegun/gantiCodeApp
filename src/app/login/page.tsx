@@ -56,7 +56,7 @@ export default function LoginPage() {
         switch (userRole) {
           case 'STOCK_MANAGER':
           case 'ADMIN':
-            router.push('/stock');
+            router.push('/stock/enhanced');
             break;
           case 'PRODUCT_CODE_MANAGER':
             router.push('/product-code');

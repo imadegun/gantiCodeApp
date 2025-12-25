@@ -312,7 +312,7 @@ export default function CollectionsPage() {
                 <SelectContent>
                   <SelectItem value="all">All Designs</SelectItem>
                   {designs.map((design) => (
-                    <SelectItem key={design.DesignCode} value={design.DesignName}>
+                    <SelectItem key={design.DesignCode} value={design.DesignCode}>
                       {design.DesignName}
                     </SelectItem>
                   ))}

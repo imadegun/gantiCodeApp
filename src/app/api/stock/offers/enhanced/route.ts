@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as OfferStatus | null;
     const stockId = searchParams.get('stockId');
-    const clientId = searchParams.get('clientId');
+    const clientCode = searchParams.get('clientCode');
+    const designName = searchParams.get('designName');
     const search = searchParams.get('search');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
@@ -19,16 +20,16 @@ export async function GET(request: NextRequest) {
     
     if (status) whereClause.status = status;
     if (stockId) whereClause.stockId = stockId;
-    if (clientId) whereClause.clientId = clientId;
-    
-    // Add search functionality
-    if (search) {
+    if (clientCode) whereClause.clientCode = clientCode;
+    if (designName) {
+      whereClause.stock = { designCode: { contains: designName, mode: 'insensitive' } };
+    } else if (search) {
       whereClause.OR = [
-        { clientId: { contains: search, mode: 'insensitive' } },
-        { stock: { designCode: { contains: search, mode: 'insensitive' } } },
-        { stock: { clientCode: { contains: search, mode: 'insensitive' } } },
-        { stock: { nameCode: { contains: search, mode: 'insensitive' } } },
-        { stock: { productId: { equals: parseInt(search) || 0 } } },
+        { clientCode: { contains: search, mode: 'insensitive' } },
+        { stock: { designCode: { contains: search, mode: 'insensitive' } },
+        { stock: { clientCode: { contains: search, mode: 'insensitive' } },
+        { stock: { nameCode: { contains: search, mode: 'insensitive' } },
+        { stock: { productId: { equals: parseInt(search) || 0 } }
       ];
     }
 
@@ -54,13 +55,6 @@ export async function GET(request: NextRequest) {
               }
             }
           }
-        },
-        creator: {
-          select: {
-            id: true,
-            name: true,
-            username: true
-          }
         }
       },
       orderBy: { createdAt: 'desc' },
@@ -68,12 +62,52 @@ export async function GET(request: NextRequest) {
       take: limit,
     });
 
+    // Enrich with product data from MySQL
+    const enrichedOffers = await Promise.all(
+      offers.map(async (offer) => {
+        try {
+          const productResult = await query(
+            `SELECT DesignName, CategoryName, SizeName, ColorName, MaterialName, Photo1
+             FROM tblcollect_master WHERE ID = ?`,
+            [offer.stock.productId]
+          );
+          
+          // Handle MySQL result - could be array or OkPacket
+          const products = Array.isArray(productResult) ? productResult :
+                          (productResult && typeof productResult === 'object' && 'length' in productResult) ? productResult : [];
+          
+          if (products && products.length > 0) {
+            const product = products[0];
+            // Merge product data with stock data
+            return {
+              ...offer,
+              stock: {
+                ...offer.stock,
+                product: {
+                  DesignName: product.DesignName || offer.stock.designCode,
+                  CategoryName: product.CategoryName || offer.stock.categoryCode,
+                  SizeName: product.SizeName || offer.stock.sizeCode,
+                  ColorName: product.ColorName,
+                  MaterialName: product.MaterialName,
+                  Photo1: product.Photo1 || offer.stock.photo1
+                }
+              }
+            };
+          }
+        } catch (error) {
+          console.error('Error fetching product data:', error);
+        }
+        
+        return offer;
+      })
+    );
+
     // Get total count for pagination
     const totalCount = await prisma.stockOffer.count({ where: whereClause });
-
-    return NextResponse.json({ 
-      success: true, 
-      data: offers,
+    
+    return NextResponse.json({
+      success: true,
+      data: enrichedOffers,
       pagination: {
         page,
         limit,
@@ -94,16 +128,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { stockId, clientId, quantity, expiryDays, notes, createdBy } = body;
-
-    if (!stockId || !clientId || !quantity || !createdBy) {
+    const { stockId, clientCode, quantity, expiryDays, notes, createdBy } = body;
+    
+    if (!stockId || !clientCode || !quantity || !createdBy) {
       return NextResponse.json(
-        { success: false, error: 'Stock ID, client ID, quantity, and created by are required' },
+        { success: false, error: 'Stock ID, client code, quantity, and created by are required' },
         { status: 400 }
       );
     }
 
-    // Get the stock item
+    // Get stock item
     const stock = await prisma.stock.findUnique({
       where: { id: stockId }
     });
@@ -116,7 +150,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if enough stock is available
-    const availableQuantity = stock.qty_in - stock.qty_offer;
+    const availableQuantity = stock.availableQuantity;
     if (availableQuantity < quantity) {
       return NextResponse.json(
         { success: false, error: `Insufficient stock. Available: ${availableQuantity}, Requested: ${quantity}` },
@@ -127,29 +161,22 @@ export async function POST(request: NextRequest) {
     // Calculate expiry date
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + (expiryDays || 7));
-
-    // Create the offer and update stock in a transaction
+    
+    // Create offer and update stock in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Create the offer
+      // Create offer
       const offer = await tx.stockOffer.create({
         data: {
           stockId,
-          clientId,
+          clientCode,
           quantity,
           expiryDate,
           notes,
-          createdBy,
+          offeredBy: createdBy,
           status: 'pending'
         },
         include: {
-          stock: true,
-          creator: {
-            select: {
-              id: true,
-              name: true,
-              username: true
-            }
-          }
+          stock: true
         }
       });
 
@@ -166,8 +193,6 @@ export async function POST(request: NextRequest) {
       let newStatus = stock.status;
       if (updatedStock.availableQuantity === 0) {
         newStatus = 'out_of_stock';
-      } else if (updatedStock.availableQuantity <= 5) {
-        newStatus = 'low_stock';
       }
 
       if (newStatus !== stock.status) {
@@ -199,7 +224,7 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const { offerId, action, reason } = body;
-
+    
     if (!offerId || !action) {
       return NextResponse.json(
         { success: false, error: 'Offer ID and action are required' },
@@ -207,7 +232,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Get the offer
+    // Get offer
     const offer = await prisma.stockOffer.findUnique({
       where: { id: offerId },
       include: { stock: true }
@@ -257,19 +282,12 @@ export async function PUT(request: NextRequest) {
 
     // Update offer and stock in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Update the offer
+      // Update offer
       const updatedOffer = await tx.stockOffer.update({
         where: { id: offerId },
         data: { status: newStatus },
         include: {
-          stock: true,
-          creator: {
-            select: {
-              id: true,
-              name: true,
-              username: true
-            }
-          }
+          stock: true
         }
       });
 
@@ -283,12 +301,10 @@ export async function PUT(request: NextRequest) {
           }
         });
 
-        // Update stock status based on the new available quantity
+        // Update stock status based on new available quantity
         let newStockStatus: StockStatus = 'available';
         if (updatedStock.availableQuantity === 0) {
           newStockStatus = 'out_of_stock';
-        } else if (updatedStock.availableQuantity <= 5) {
-          newStockStatus = 'low_stock';
         }
 
         const finalStock = await tx.stock.update({
@@ -299,13 +315,12 @@ export async function PUT(request: NextRequest) {
         return { offer: updatedOffer, stock: finalStock };
       }
 
-      // For approved - just reduce the qty_in permanently
+      // For approved - increment reserved count (qty_offer) permanently
       if (action === 'approve') {
         const updatedStock = await tx.stock.update({
           where: { id: offer.stockId },
           data: {
-            qty_in: { decrement: offer.quantity },
-            total: { decrement: offer.quantity }
+            qty_offer: { increment: offer.quantity }
           }
         });
 

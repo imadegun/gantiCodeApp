@@ -64,21 +64,21 @@ import {
 
 interface StockOffer {
   id: string;
-  clientId: string;
+  clientCode: string;
   quantity: number;
   status: 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
   offerDate: string;
   expiryDate: string;
   notes?: string;
+  offeredBy?: string;
   createdAt: string;
   updatedAt: string;
   stock: {
     id: string;
     productId: number;
-    categoryName: string;
-    designCode: string; 
-    designName: string;   
-    clientCode: string;
+    designCode: string;
+    categoryCode?: string;
+    sizeCode?: string;
     nameCode?: string;
     photo1?: string;
     warehouse?: {
@@ -93,17 +93,12 @@ interface StockOffer {
       column?: string;
       level?: string;
     };
-    product: {
+    product?: {
       DesignName?: string;
       CategoryName?: string;
       SizeName?: string;
       [key: string]: any; // Allow other properties
     }; // Product data from MySQL
-  };
-  creator: {
-    id: string;
-    name: string;
-    username: string;
   };
 }
 
@@ -111,13 +106,16 @@ export default function ReservationsPage() {
   const [offers, setOffers] = useState<StockOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [clientFilter, setClientFilter] = useState('all');
+  const [designFilter, setDesignFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('pending');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [selectedOffer, setSelectedOffer] = useState<StockOffer | null>(null);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [offerToCancel, setOfferToCancel] = useState<string | null>(null);
+  const [offerToApprove, setOfferToApprove] = useState<string | null>(null);
 
   // Fetch reservations data
   const fetchOffers = async () => {
@@ -125,7 +123,8 @@ export default function ReservationsPage() {
       setLoading(true);
       const params = new URLSearchParams();
       if (searchTerm) params.append('search', searchTerm);
-      if (clientFilter && clientFilter !== 'all') params.append('clientId', clientFilter);
+      if (designFilter && designFilter !== 'all') params.append('designName', designFilter);
+      if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
       params.append('page', currentPage.toString());
       params.append('limit', itemsPerPage.toString());
 
@@ -145,7 +144,7 @@ export default function ReservationsPage() {
 
   useEffect(() => {
     fetchOffers();
-  }, [searchTerm, clientFilter, currentPage, itemsPerPage]);
+  }, [searchTerm, designFilter, statusFilter, currentPage, itemsPerPage]);
 
   // Handle offer cancellation
   const handleCancelOffer = async (offerId: string) => {
@@ -162,11 +161,34 @@ export default function ReservationsPage() {
       const result = await response.json();
 
       if (result.success) {
-        // Refresh the offers list
+        // Refresh offers list
         fetchOffers();
       }
     } catch (error) {
       console.error('Error cancelling offer:', error);
+    }
+  };
+
+  // Handle offer approval
+  const handleApproveOffer = async (offerId: string) => {
+    try {
+      const response = await fetch('/api/stock/offers/enhanced', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          offerId,
+          action: 'approve'
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Refresh offers list
+        fetchOffers();
+      }
+    } catch (error) {
+      console.error('Error approving offer:', error);
     }
   };
 
@@ -188,8 +210,17 @@ export default function ReservationsPage() {
     }
   };
 
-  // Filter unique clients for the select dropdown
-  const uniqueClients = Array.from(new Set(offers.map(offer => offer.clientId)));
+  // Filter unique designs for select dropdown
+  const uniqueDesigns = Array.from(new Set(offers.map(offer => offer.stock.product?.DesignName).filter(Boolean)));
+  
+  // Filter status options
+  const statusOptions = [
+    { value: 'pending', label: 'Pending' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'rejected', label: 'Rejected' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'expired', label: 'Expired' },
+  ];
 
   return (
     <div className="container mx-auto p-6">
@@ -207,7 +238,7 @@ export default function ReservationsPage() {
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by client, design code, or product..."
+                placeholder="Search by client code, design name, or product..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8"
@@ -215,18 +246,34 @@ export default function ReservationsPage() {
             </div>
           </div>
           
+          <div className="w-full sm:w-48">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                {statusOptions.map(status => (
+                  <SelectItem key={status.value} value={status.value}>
+                    {status.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
           <div className="w-full sm:w-64">
             <div className="relative">
               <Filter className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Select value={clientFilter} onValueChange={setClientFilter}>
+              <Select value={designFilter} onValueChange={setDesignFilter}>
                 <SelectTrigger className="pl-8">
-                  <SelectValue placeholder="Filter by Client" />
+                  <SelectValue placeholder="Filter by Design Name" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Clients</SelectItem>
-                  {uniqueClients.map(clientId => (
-                    <SelectItem key={clientId} value={clientId}>
-                      {clientId}
+                  <SelectItem value="all">All Designs</SelectItem>
+                  {uniqueDesigns.map(designName => (
+                    <SelectItem key={designName} value={designName}>
+                      {designName}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -263,10 +310,11 @@ export default function ReservationsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Design</TableHead>
+                    <TableHead>Design Name</TableHead>
                     <TableHead>Photo</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Size</TableHead>
+                    <TableHead>Category Name</TableHead>
+                    <TableHead>Size Name</TableHead>
+                    <TableHead>Client Code</TableHead>
                     <TableHead>Qty</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Expiry</TableHead>
@@ -277,25 +325,23 @@ export default function ReservationsPage() {
                 <TableBody>
                   {offers.map((offer) => (
                     <TableRow key={offer.id}>
-                      <TableCell className="font-medium">{offer.stock.designName}</TableCell>
+                      <TableCell className="font-medium">{offer.stock.product?.DesignName || offer.stock.designCode || '-'}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          {offer.stock.photo1 && (
-                            <img 
-                              src={offer.stock.photo1} 
-                              alt="Product" 
-                              className="w-8 h-8 object-cover rounded"
-                            />
-                          )}
-                          <div>
-                            <div>{offer.stock.clientCode}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {offer.stock.categoryName}
-                            </div>
-                          </div>
-                        </div>
+                        {offer.stock.photo1 && (
+                          <img
+                            src={offer.stock.photo1.startsWith('http') ? offer.stock.photo1 : `http://192.168.1.110/upload/${offer.stock.photo1}`}
+                            alt="Product"
+                            className="w-12 h-12 object-cover rounded"
+                            onError={(e) => {
+                              e.currentTarget.src = '';
+                              e.currentTarget.alt = 'No image';
+                            }}
+                          />
+                        )}
                       </TableCell>
-                      <TableCell>{offer.stock.product?.SizeName || 'N/A'}</TableCell>
+                      <TableCell>{offer.stock.product?.CategoryName || offer.stock.categoryCode || 'N/A'}</TableCell>
+                      <TableCell>{offer.stock.product?.SizeName || offer.stock.sizeCode || 'N/A'}</TableCell>
+                      <TableCell className="font-medium">{offer.clientCode}</TableCell>
                       <TableCell>{offer.quantity}</TableCell>
                       <TableCell>
                         {new Date(offer.createdAt).toLocaleDateString()}
@@ -311,8 +357,8 @@ export default function ReservationsPage() {
                         <div className="flex gap-2">
                           <Dialog>
                             <DialogTrigger asChild>
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 variant="outline"
                                 onClick={() => setSelectedOffer(offer)}
                               >
@@ -331,8 +377,8 @@ export default function ReservationsPage() {
                                 <div className="space-y-4">
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                      <h4 className="font-medium mb-1">Client</h4>
-                                      <p>{selectedOffer.stock.clientCode}</p>
+                                      <h4 className="font-medium mb-1">Client Code</h4>
+                                      <p>{selectedOffer.clientCode}</p>
                                     </div>
                                     <div>
                                       <h4 className="font-medium mb-1">Status</h4>
@@ -351,8 +397,8 @@ export default function ReservationsPage() {
                                       <p>{new Date(selectedOffer.expiryDate).toLocaleString()}</p>
                                     </div>
                                     <div>
-                                      <h4 className="font-medium mb-1">Creator</h4>
-                                      <p>{selectedOffer.creator.name} ({selectedOffer.creator.username})</p>
+                                      <h4 className="font-medium mb-1">Offered By</h4>
+                                      <p>{selectedOffer.offeredBy || 'N/A'}</p>
                                     </div>
                                   </div>
                                   
@@ -367,10 +413,10 @@ export default function ReservationsPage() {
                                     <h4 className="font-medium mb-1">Product Details</h4>
                                     <div className="border rounded p-3">
                                       <div className="grid grid-cols-2 gap-2 text-sm">
-                                        <div><span className="font-medium">Design Name:</span> {selectedOffer.stock.designName}</div>
-                                        <div><span className="font-medium">Client Code:</span> {selectedOffer.stock.clientCode}</div>
-                                        <div><span className="font-medium">Category:</span> {selectedOffer.stock.categoryName}</div>
-                                        <div><span className="font-medium">Size:</span> {selectedOffer.stock.product?.SizeName || 'N/A'}</div>
+                                        <div><span className="font-medium">Design Name:</span> {selectedOffer.stock.product?.DesignName || selectedOffer.stock.designCode || 'N/A'}</div>
+                                        <div><span className="font-medium">Client Code:</span> {selectedOffer.clientCode}</div>
+                                        <div><span className="font-medium">Category:</span> {selectedOffer.stock.product?.CategoryName || selectedOffer.stock.categoryCode || 'N/A'}</div>
+                                        <div><span className="font-medium">Size:</span> {selectedOffer.stock.product?.SizeName || selectedOffer.stock.sizeCode || 'N/A'}</div>
                                         {selectedOffer.stock.warehouse && (
                                           <div><span className="font-medium">Warehouse:</span> {selectedOffer.stock.warehouse.name}</div>
                                         )}
@@ -384,19 +430,31 @@ export default function ReservationsPage() {
                               )}
                             </DialogContent>
                           </Dialog>
-                          
+                           
                           {offer.status === 'pending' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setOfferToCancel(offer.id);
-                                setShowCancelDialog(true);
-                              }}
-                            >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Cancel
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setOfferToApprove(offer.id);
+                                  setShowApproveDialog(true);
+                                }}
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setOfferToCancel(offer.id);
+                                  setShowCancelDialog(true);
+                                }}
+                              >
+                                <XCircle className="h-4 w-4 mr-1" />
+                                Cancel
+                              </Button>
+                            </>
                           )}
                         </div>
                       </TableCell>
@@ -418,12 +476,12 @@ export default function ReservationsPage() {
                         className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
                       />
                     </PaginationItem>
-                    
+                     
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                       const startPage = Math.max(1, currentPage - 2);
                       const pageNum = startPage + i;
                       if (pageNum > totalPages) return null;
-                      
+                       
                       return (
                         <PaginationItem key={pageNum}>
                           <PaginationLink 
@@ -435,7 +493,7 @@ export default function ReservationsPage() {
                         </PaginationItem>
                       );
                     })}
-                    
+                     
                     <PaginationItem>
                       <PaginationNext 
                         onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
@@ -472,6 +530,33 @@ export default function ReservationsPage() {
               className="bg-red-600 hover:bg-red-700"
             >
               Confirm Cancel
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Approve Confirmation Dialog */}
+      <AlertDialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve Reservation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to approve this reservation? This will permanently reserve the stock and it cannot be cancelled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (offerToApprove) {
+                  handleApproveOffer(offerToApprove);
+                  setOfferToApprove(null);
+                  setShowApproveDialog(false);
+                }
+              }}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Confirm Approve
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

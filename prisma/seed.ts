@@ -57,21 +57,21 @@ async function main() {
 
   console.log('Created product manager user:', productManager);
 
-  // Create test client
-  const client = await prisma.client.upsert({
-    where: { clientCode: 'TEST001' },
-    update: {},
-    create: {
-      clientCode: 'TEST001',
-      name: 'Test Client',
-      email: 'test@client.com',
-      phone: '+1234567890',
-      address: '123 Test Street, Test City',
-      isActive: true
-    }
-  });
+  // // Create test client
+  // const client = await prisma.client.upsert({
+  //   where: { clientCode: 'TEST001' },
+  //   update: {},
+  //   create: {
+  //     clientCode: 'TEST001',
+  //     name: 'Test Client',
+  //     email: 'test@client.com',
+  //     phone: '+1234567890',
+  //     address: '123 Test Street, Test City',
+  //     isActive: true
+  //   }
+  // });
 
-  console.log('Created test client:', client);
+  // console.log('Created test client:', client);
 
   console.log('Seeding finished.');
 }

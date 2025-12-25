@@ -38,7 +38,7 @@ interface StockItem {
   isLid_only: boolean;
   expirationYears: number;
   expirationDate?: string;
-  status: 'available' | 'low_stock' | 'out_of_stock';
+  status: 'available' | 'out_of_stock';
   notes?: string;
   warehouse?: {
     id: string;
@@ -1327,9 +1327,9 @@ export default function EnhancedStockManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stockId: reservingStock.id,
-          clientId: userId, // Use current user ID as client
+          clientCode: reserveFormData.designCode,
           quantity: reserveFormData.quantity,
-          notes: `${reserveFormData.designCode} - ${reserveFormData.notes || ''}`.trim(),
+          notes: reserveFormData.notes || '',
           expiryDays: reserveFormData.expiryDays,
           createdBy: userId
         })
@@ -1412,8 +1412,6 @@ export default function EnhancedStockManagement() {
     switch (status) {
       case 'available':
         return <Badge className="bg-green-100 text-green-800">Available</Badge>;
-      case 'low_stock':
-        return <Badge className="bg-yellow-100 text-yellow-800">Low Stock</Badge>;
       case 'out_of_stock':
         return <Badge className="bg-red-100 text-red-800">Out of Stock</Badge>;
       default:
@@ -1426,8 +1424,6 @@ export default function EnhancedStockManagement() {
     switch (status) {
       case 'available':
         return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case 'low_stock':
-        return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
       case 'out_of_stock':
         return <XCircle className="h-4 w-4 text-red-600" />;
       default:
@@ -1539,7 +1535,6 @@ export default function EnhancedStockManagement() {
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="available">Available</SelectItem>
-                    <SelectItem value="low_stock">Low Stock</SelectItem>
                     <SelectItem value="out_of_stock">Out of Stock</SelectItem>
                   </SelectContent>
                 </Select>
@@ -2293,7 +2288,7 @@ export default function EnhancedStockManagement() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Design Code</Label>
+              <Label>DesignCode</Label>
               <div className="mt-2 p-2 bg-muted rounded text-sm font-medium">
                 {reserveFormData.designCode}
               </div>

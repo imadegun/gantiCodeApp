@@ -66,7 +66,6 @@ enum POStatus {
 
 enum StockStatus {
   available
-  low_stock
   out_of_stock
 }
 
@@ -117,6 +116,9 @@ model StockEntry {
 }
 
 
+
+
+// Client Model
 model Client {
   id         String   @id @default(cuid())
   clientCode String   @unique

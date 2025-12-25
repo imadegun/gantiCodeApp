@@ -92,9 +92,40 @@ export default function ProductDetailPage() {
     return unit ? `${value} ${unit}` : value;
   };
 
-  const formatDescription = (value: string | null) => {
+  // Format long text with proper line breaks and special character handling
+  const formatLongText = (value: string | null) => {
     if (!value) return 'No description available';
-    return value;
+    
+    // Replace special formatting characters with proper formatting
+    let formattedValue = value
+      .replace(/={10,}/g, '\n────────────────────\n') // Replace sequences of = with a line separator
+      .replace(/spacy/gi, '\n(spacy)\n') // Add line breaks around 'spacy'
+      .replace(/\|\|/g, '\n'); // Replace || with newlines
+    
+    return formattedValue;
+  };
+
+  const formatDescriptionWithTruncation = (value: string | null, maxLength: number = 200) => {
+    if (!value) return { full: 'No description available', truncated: 'No description available' };
+    
+    // Replace special formatting characters with proper formatting
+    let formattedValue = value
+      .replace(/={10,}/g, '\n────────────────────\n') // Replace sequences of = with a line separator
+      .replace(/spacy/gi, '\n(spacy)\n') // Add line breaks around 'spacy'
+      .replace(/\|\|/g, '\n'); // Replace || with newlines
+    
+    // Truncate if too long (only if there are no line breaks)
+    if (formattedValue.length > maxLength && !formattedValue.includes('\n')) {
+      return {
+        full: formattedValue,
+        truncated: formattedValue.substring(0, maxLength) + '...'
+      };
+    }
+    
+    return {
+      full: formattedValue,
+      truncated: formattedValue
+    };
   };
 
   if (loading) {
@@ -238,7 +269,7 @@ export default function ProductDetailPage() {
                         <p className="text-lg font-semibold">{product.ID}</p>
                       </div>
                       <div>
-                        <h3 className="text-sm font-medium text-muted-foreground mb-1">Client Code</h3>
+                        <h3 className="text-sm font-medium text-muted-foreground mb-1">Code</h3>
                         <p className="text-lg font-semibold">{product.ClientCode || 'Not assigned'}</p>
                       </div>
                       <div>
@@ -260,7 +291,9 @@ export default function ProductDetailPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Description</h3>
-                      <p className="text-lg font-semibold">{formatDescription(product.NameDesc)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-lg font-semibold bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.NameDesc)}</p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -292,15 +325,21 @@ export default function ProductDetailPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Build Technique Notes</h3>
-                      <p>{formatDescription(product.BuildTechNote)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.BuildTechNote)}</p>
+                      </div>
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Clay Notes</h3>
-                      <p>{formatDescription(product.ClayNote)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.ClayNote)}</p>
+                      </div>
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Tools Description</h3>
-                      <p>{formatDescription(product.ToolsDescription)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.ToolsDescription)}</p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -332,22 +371,30 @@ export default function ProductDetailPage() {
 
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Glaze Description</h3>
-                      <p>{formatDescription(product.GlazeDescription)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.GlazeDescription)}</p>
+                      </div>
                     </div>
 
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Stain/Oxide Description</h3>
-                      <p>{formatDescription(product.StainOxideDescription)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.StainOxideDescription)}</p>
+                      </div>
                     </div>
 
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Lustre Description</h3>
-                      <p>{formatDescription(product.LustreDescription)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.LustreDescription)}</p>
+                      </div>
                     </div>
 
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Engobe Description</h3>
-                      <p>{formatDescription(product.EngobeDescription)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.EngobeDescription)}</p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -379,19 +426,27 @@ export default function ProductDetailPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Firing Notes</h3>
-                      <p>{formatDescription(product.FiringNote)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.FiringNote)}</p>
+                      </div>
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Bisque Notes</h3>
-                      <p>{formatDescription(product.BisqueTempNote)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.BisqueTempNote)}</p>
+                      </div>
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Glaze Temperature Notes</h3>
-                      <p>{formatDescription(product.GlazeTempNote)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.GlazeTempNote)}</p>
+                      </div>
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-1">Lustre Temperature Notes</h3>
-                      <p>{formatDescription(product.LustreTempNote)}</p>
+                      <div className="prose prose-sm max-w-none whitespace-pre-line text-muted-foreground bg-muted/30 p-4 rounded-md border border-muted-foreground/20 min-h-[40px]">
+                        <p className="mb-0">{formatLongText(product.LustreTempNote)}</p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

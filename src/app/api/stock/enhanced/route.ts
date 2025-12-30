@@ -55,11 +55,10 @@ export async function GET(request: NextRequest) {
             username: true
           }
         },
-        _count: {
+        offers: {
+          where: { status: 'pending' },
           select: {
-            offers: {
-              where: { status: 'pending' }
-            }
+            quantity: true
           }
         }
       },
@@ -69,15 +68,15 @@ export async function GET(request: NextRequest) {
       ]
     });
 
-    // Enrich with MySQL product data
+    // Enrich with MySQL product data and calculate reserved quantity
     const enrichedStocks = await Promise.all(
       stocks.map(async (stock) => {
         try {
           // Get product details from MySQL
           const productRows = await query(
-            `SELECT m.ID, m.ClientCode, m.DesignCode, m.NameCode, m.CategoryCode, 
+            `SELECT m.ID, m.ClientCode, m.DesignCode, m.NameCode, m.CategoryCode,
                     m.SizeCode, m.ColorCode, m.TextureCode, m.MaterialCode, m.Photo1,
-                    d.DesignName, n.NameDesc, c.CategoryName, co.ColorName, 
+                    d.DesignName, n.NameDesc, c.CategoryName, co.ColorName,
                     t.TextureName, s.SizeName, ma.MaterialName
              FROM tblcollect_master m
              LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
@@ -93,9 +92,29 @@ export async function GET(request: NextRequest) {
 
           const product = productRows && productRows.length > 0 ? productRows[0] : null;
 
+          // Calculate reserved quantity from pending offers only
+          const reservedQuantity = stock.offers.reduce((sum, offer) => sum + offer.quantity, 0);
+
+          // Get approved offers for this stock
+          const approvedOffers = await prisma.stockOffer.findMany({
+            where: {
+              stockId: stock.id,
+              status: 'approved'
+            },
+            select: { quantity: true }
+          });
+          const approvedQuantity = approvedOffers.reduce((sum, offer) => sum + offer.quantity, 0);
+
+          // Calculate dynamic total: approved reservations + pending reservations
+          const dynamicTotal = approvedQuantity + reservedQuantity;
+
           return {
             ...stock,
             product,
+            // Override qty_offer with calculated pending reservations
+            qty_offer: reservedQuantity,
+            // Override total with dynamic calculation (approved + pending)
+            total: dynamicTotal,
             // Use stored available quantity (updated in transactions)
             availableQuantity: stock.availableQuantity,
             // Check if stock is expiring soon
@@ -104,9 +123,12 @@ export async function GET(request: NextRequest) {
           };
         } catch (error) {
           console.error('Error enriching stock data:', error);
+          // Calculate reserved quantity even if product fetch fails
+          const reservedQuantity = stock.offers.reduce((sum, offer) => sum + offer.quantity, 0);
           return {
             ...stock,
             product: null,
+            qty_offer: reservedQuantity,
             availableQuantity: stock.availableQuantity,
             isExpiringSoon: false
           };
@@ -232,10 +254,31 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingStock) {
+      // Get pending offers for existing stock to calculate reserved quantity
+      const pendingOffers = await prisma.stockOffer.findMany({
+        where: {
+          stockId: existingStock.id,
+          status: 'pending'
+        },
+        select: { quantity: true }
+      });
+      const reservedQuantity = pendingOffers.reduce((sum, offer) => sum + offer.quantity, 0);
+
+      // Get approved offers for existing stock
+      const approvedOffers = await prisma.stockOffer.findMany({
+        where: {
+          stockId: existingStock.id,
+          status: 'approved'
+        },
+        select: { quantity: true }
+      });
+      const approvedQuantity = approvedOffers.reduce((sum, offer) => sum + offer.quantity, 0);
+
       // Add to existing stock
       const newQtyIn = existingStock.qty_in + qty_in;
-      const newTotal = newQtyIn;
-      const newAvailableQuantity = newQtyIn - existingStock.qty_offer;
+      // Calculate dynamic total: approved reservations + pending reservations
+      const newTotal = approvedQuantity + reservedQuantity;
+      const newAvailableQuantity = newQtyIn - reservedQuantity;
 
       const updatedStock = await prisma.stock.update({
         where: { id: existingStock.id },
@@ -243,6 +286,7 @@ export async function POST(request: NextRequest) {
           qty_in: newQtyIn,
           total: newTotal,
           availableQuantity: newAvailableQuantity,
+          qty_offer: reservedQuantity, // Update with calculated pending reservations
           // Update other fields if provided
           ...(warehouseId !== undefined && { warehouseId }),
           ...(validatedShelfId !== undefined && { shelfId: validatedShelfId }),
@@ -410,17 +454,39 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // Get pending offers for current stock to calculate reserved quantity
+    const pendingOffers = await prisma.stockOffer.findMany({
+      where: {
+        stockId: stockId,
+        status: 'pending'
+      },
+      select: { quantity: true }
+    });
+    const reservedQuantity = pendingOffers.reduce((sum, offer) => sum + offer.quantity, 0);
+
+    // Get approved offers for current stock
+    const approvedOffers = await prisma.stockOffer.findMany({
+      where: {
+        stockId: stockId,
+        status: 'approved'
+      },
+      select: { quantity: true }
+    });
+    const approvedQuantity = approvedOffers.reduce((sum, offer) => sum + offer.quantity, 0);
+
     // Calculate new total and available quantity
     // When updating qty_in, set to new value (standard editing)
     const newQtyIn = qty_in !== undefined ? qty_in : currentStock.qty_in;
-    const newTotal = newQtyIn;
-    const newAvailableQuantity = newQtyIn - currentStock.qty_offer;
+    // Calculate dynamic total: approved reservations + pending reservations
+    const newTotal = approvedQuantity + reservedQuantity;
+    const newAvailableQuantity = newQtyIn - reservedQuantity;
 
     // Update stock entry
     const updateData: any = {
       qty_in: newQtyIn,
       total: newTotal,
       availableQuantity: newAvailableQuantity,
+      qty_offer: reservedQuantity, // Update with calculated pending reservations
       isComplated_set: isComplated_set !== undefined ? isComplated_set : currentStock.isComplated_set,
       isBody_only: isBody_only !== undefined ? isBody_only : currentStock.isBody_only,
       isLid_only: isLid_only !== undefined ? isLid_only : currentStock.isLid_only,

@@ -264,7 +264,7 @@ export async function PUT(request: NextRequest) {
     switch (action) {
       case 'approve':
         newStatus = 'approved';
-        message = `Offer approved. ${offer.quantity} units permanently reserved.`;
+        message = `Offer approved. ${offer.quantity} units allocated.`;
         break;
       case 'reject':
         newStatus = 'rejected';
@@ -296,7 +296,7 @@ export async function PUT(request: NextRequest) {
         }
       });
 
-      // For reject, cancel, or expire - return stock to available
+      // For reject, cancel, or expire - return stock to available and reduce reserved count
       if (['reject', 'cancel', 'expire'].includes(action)) {
         const updatedStock = await tx.stock.update({
           where: { id: offer.stockId },
@@ -320,12 +320,13 @@ export async function PUT(request: NextRequest) {
         return { offer: updatedOffer, stock: finalStock };
       }
 
-      // For approved - increment reserved count (qty_offer) permanently
+      // For approved - reduce reserved count (qty_offer) to 0 since stock is no longer pending
+      // The availableQuantity remains unchanged as it was already decremented when offer was created
       if (action === 'approve') {
         const updatedStock = await tx.stock.update({
           where: { id: offer.stockId },
           data: {
-            qty_offer: { increment: offer.quantity }
+            qty_offer: { decrement: offer.quantity }
           }
         });
 

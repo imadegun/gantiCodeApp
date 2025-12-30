@@ -1631,8 +1631,8 @@ export default function EnhancedStockManagement() {
                         {/* <TableHead>Texture</TableHead> */}
                         <TableHead>Color</TableHead>
                         <TableHead>Available</TableHead>
-                        <TableHead>Reserved</TableHead>
-                        <TableHead>Total</TableHead>
+                        <TableHead title="Reserved (pending offers only)">Reserved</TableHead>
+                        <TableHead title="Total (approved + pending reservations)">Total</TableHead>
                         <TableHead>Status</TableHead>
                         {/* <TableHead>Expiration</TableHead> */}
                         <TableHead>Actions</TableHead>
@@ -1812,7 +1812,8 @@ export default function EnhancedStockManagement() {
                                         <Label>Quantities</Label>
                                         <div className="mt-2 space-y-2">
                                           <div><strong>Total In:</strong> {stock.qty_in}</div>
-                                          <div><strong>Reserved:</strong> {stock.qty_offer}</div>
+                                          <div title="Dynamic total = approved reservations + pending reservations"><strong>Total (approved + pending):</strong> {stock.total}</div>
+                                          <div title="Reserved by pending offers only"><strong>Reserved:</strong> {stock.qty_offer}</div>
                                           <div><strong>Available:</strong> {stock.availableQuantity}</div>
                                           <div><strong>Actual Available for Sale:</strong> {getActualAvailableStock(stock)}</div>
                                           {stock.productType === 'SET_PRODUCT' && (
@@ -2181,9 +2182,12 @@ export default function EnhancedStockManagement() {
                   placeholder="Enter new quantity"
                 />
                 {editingStock && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Current stock: {editingStock.qty_in} units
-                  </p>
+                  <div className="text-sm text-muted-foreground mt-1 space-y-1">
+                    <p>Current stock: {editingStock.qty_in} units</p>
+                    <p title="Dynamic total = approved reservations + pending reservations">
+                      Total (approved + pending): {editingStock.total} units
+                    </p>
+                  </div>
                 )}
               </div>
 

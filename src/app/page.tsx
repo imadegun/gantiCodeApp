@@ -340,7 +340,7 @@ export default function CollectionsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-20">Photo</TableHead>
-                    <TableHead className="w-32">Collect Code</TableHead>
+                    <TableHead className="w-32">Code</TableHead>
                     <TableHead className="w-48">Design</TableHead>
                     <TableHead className="w-32">Size</TableHead>
                     <TableHead className="w-48">Category</TableHead>

@@ -26,10 +26,10 @@ export async function GET(request: NextRequest) {
     } else if (search) {
       whereClause.OR = [
         { clientCode: { contains: search, mode: 'insensitive' } },
-        { stock: { designCode: { contains: search, mode: 'insensitive' } },
-        { stock: { clientCode: { contains: search, mode: 'insensitive' } },
-        { stock: { nameCode: { contains: search, mode: 'insensitive' } },
-        { stock: { productId: { equals: parseInt(search) || 0 } }
+        { stock: { designCode: { contains: search, mode: 'insensitive' } } },
+        { stock: { clientCode: { contains: search, mode: 'insensitive' } } },
+        { stock: { nameCode: { contains: search, mode: 'insensitive' } } },
+        { stock: { productId: { equals: parseInt(search) || 0 } } }
       ];
     }
 
@@ -73,8 +73,13 @@ export async function GET(request: NextRequest) {
           );
           
           // Handle MySQL result - could be array or OkPacket
-          const products = Array.isArray(productResult) ? productResult :
-                          (productResult && typeof productResult === 'object' && 'length' in productResult) ? productResult : [];
+          let products: any[] = [];
+          if (Array.isArray(productResult)) {
+            products = productResult;
+          } else {
+            // If it's not an array, return empty array
+            products = [];
+          }
           
           if (products && products.length > 0) {
             const product = products[0];

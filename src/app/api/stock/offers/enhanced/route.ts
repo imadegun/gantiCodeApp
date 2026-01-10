@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient, OfferStatus, StockStatus } from '@prisma/client';
 import { query } from '@/lib/mysql';
+import { broadcastStockUpdate } from '@/lib/socket-server';
 
 const prisma = new PrismaClient();
 
@@ -210,6 +211,12 @@ export async function POST(request: NextRequest) {
       return { offer, updatedStock };
     });
 
+    // Broadcast stock update for new reservation
+    broadcastStockUpdate({
+      type: 'reservation_created',
+      stock: { ...result.updatedStock }
+    });
+
     return NextResponse.json({
       success: true,
       data: result.offer,
@@ -333,7 +340,17 @@ export async function PUT(request: NextRequest) {
         return { offer: updatedOffer, stock: updatedStock };
       }
 
-      return { offer: updatedOffer };
+      return { offer, updatedOffer };
+    });
+
+    // Broadcast stock update based on action
+    const updateType = action === 'approve' ? 'reservation_approved' :
+                      action === 'cancel' ? 'reservation_cancelled' :
+                      'reservation_updated';
+    
+    broadcastStockUpdate({
+      type: updateType,
+      stock: result.stock || result.offer.stock
     });
 
     return NextResponse.json({

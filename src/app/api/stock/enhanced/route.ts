@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient, StockStatus } from '@prisma/client';
 import { query } from '@/lib/mysql';
+import { broadcastStockUpdate } from '@/lib/socket-server';
 
 const prisma = new PrismaClient();
 
@@ -95,18 +96,10 @@ export async function GET(request: NextRequest) {
           // Calculate reserved quantity from pending offers only
           const reservedQuantity = stock.offers.reduce((sum, offer) => sum + offer.quantity, 0);
 
-          // Get approved offers for this stock
-          const approvedOffers = await prisma.stockOffer.findMany({
-            where: {
-              stockId: stock.id,
-              status: 'approved'
-            },
-            select: { quantity: true }
-          });
-          const approvedQuantity = approvedOffers.reduce((sum, offer) => sum + offer.quantity, 0);
-
-          // Calculate dynamic total: approved reservations + pending reservations
-          const dynamicTotal = approvedQuantity + reservedQuantity;
+          // Calculate dynamic total: available + pending reservations
+          // (cancelled reservations revert stock back to available, already included in availableQuantity)
+          // (approved reservations are taken by client, excluded from total)
+          const dynamicTotal = stock.availableQuantity + reservedQuantity;
 
           return {
             ...stock,
@@ -264,20 +257,12 @@ export async function POST(request: NextRequest) {
       });
       const reservedQuantity = pendingOffers.reduce((sum, offer) => sum + offer.quantity, 0);
 
-      // Get approved offers for existing stock
-      const approvedOffers = await prisma.stockOffer.findMany({
-        where: {
-          stockId: existingStock.id,
-          status: 'approved'
-        },
-        select: { quantity: true }
-      });
-      const approvedQuantity = approvedOffers.reduce((sum, offer) => sum + offer.quantity, 0);
-
       // Add to existing stock
       const newQtyIn = existingStock.qty_in + qty_in;
-      // Calculate dynamic total: approved reservations + pending reservations
-      const newTotal = approvedQuantity + reservedQuantity;
+      // Calculate dynamic total: available + pending reservations
+      // (cancelled reservations revert stock back to available, already included in availableQuantity)
+      // (approved reservations are taken by client, excluded from total)
+      const newTotal = newQtyIn - reservedQuantity + reservedQuantity;
       const newAvailableQuantity = newQtyIn - reservedQuantity;
 
       const updatedStock = await prisma.stock.update({
@@ -316,6 +301,12 @@ export async function POST(request: NextRequest) {
             }
           }
         }
+      });
+
+      // Broadcast stock update
+      broadcastStockUpdate({
+        type: 'stock_updated',
+        stock: { ...updatedStock, product }
       });
 
       return NextResponse.json({
@@ -370,6 +361,12 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+    });
+
+    // Broadcast stock creation
+    broadcastStockUpdate({
+      type: 'stock_created',
+      stock: { ...stock, product }
     });
 
     return NextResponse.json({
@@ -464,22 +461,14 @@ export async function PUT(request: NextRequest) {
     });
     const reservedQuantity = pendingOffers.reduce((sum, offer) => sum + offer.quantity, 0);
 
-    // Get approved offers for current stock
-    const approvedOffers = await prisma.stockOffer.findMany({
-      where: {
-        stockId: stockId,
-        status: 'approved'
-      },
-      select: { quantity: true }
-    });
-    const approvedQuantity = approvedOffers.reduce((sum, offer) => sum + offer.quantity, 0);
-
     // Calculate new total and available quantity
     // When updating qty_in, set to new value (standard editing)
     const newQtyIn = qty_in !== undefined ? qty_in : currentStock.qty_in;
-    // Calculate dynamic total: approved reservations + pending reservations
-    const newTotal = approvedQuantity + reservedQuantity;
     const newAvailableQuantity = newQtyIn - reservedQuantity;
+    // Calculate dynamic total: available + pending reservations
+    // (cancelled reservations revert stock back to available, already included in availableQuantity)
+    // (approved reservations are taken by client, excluded from total)
+    const newTotal = newAvailableQuantity + reservedQuantity;
 
     // Update stock entry
     const updateData: any = {
@@ -545,6 +534,12 @@ export async function PUT(request: NextRequest) {
 
     const product = productRows && productRows.length > 0 ? productRows[0] : null;
 
+    // Broadcast stock update
+    broadcastStockUpdate({
+      type: 'stock_updated',
+      stock: { ...updatedStock, product }
+    });
+
     return NextResponse.json({
       success: true,
       data: { ...updatedStock, product },
@@ -598,6 +593,12 @@ export async function DELETE(request: NextRequest) {
     // Delete stock entry
     await prisma.stock.delete({
       where: { id: stockId }
+    });
+
+    // Broadcast stock deletion
+    broadcastStockUpdate({
+      type: 'stock_deleted',
+      stockId
     });
 
     return NextResponse.json({

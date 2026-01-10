@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { io } from 'socket.io-client';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -925,6 +926,7 @@ export default function EnhancedStockManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const socketRef = useRef<any>(null);
   const [incomingStock, setIncomingStock] = useState<IncomingStock>({
     productId: 0,
     productType: 'SINGLE_ITEM',
@@ -1100,7 +1102,105 @@ export default function EnhancedStockManagement() {
     fetchDesigns();
     fetchShelves();
     fetchStockData();
+
+    // Setup WebSocket connection for real-time updates
+    setupWebSocket();
+
+    return () => {
+      // Cleanup WebSocket connection on unmount
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
   }, [statusFilter, warehouseFilter]);
+
+  // Setup WebSocket connection
+  const setupWebSocket = () => {
+    try {
+      // Connect to socket
+      const socket = io('http://localhost:3000', {
+        path: '/api/socketio',
+        transports: ['websocket', 'polling']
+      });
+
+      socketRef.current = socket;
+
+      // Listen for stock updates
+      socket.on('stock_update', (data: any) => {
+        console.log('Received stock update:', data);
+        
+        // Handle different update types
+        switch (data.type) {
+          case 'stock_created':
+            // Fetch updated stock data
+            fetchStockData();
+            toast({
+              title: 'New Stock Added',
+              description: 'Stock has been updated',
+            });
+            break;
+          case 'stock_updated':
+            // Update the specific stock item in the list
+            setStockData(prev => {
+              if (data.stock) {
+                return prev.map(item =>
+                  item.id === data.stock.id ? { ...item, ...data.stock } : item
+                );
+              }
+              return prev;
+            });
+            toast({
+              title: 'Stock Updated',
+              description: 'Stock has been updated',
+            });
+            break;
+          case 'stock_deleted':
+            // Remove the deleted stock from the list
+            setStockData(prev => prev.filter(item => item.id !== data.stockId));
+            toast({
+              title: 'Stock Deleted',
+              description: 'Stock has been deleted',
+            });
+            break;
+          case 'reservation_created':
+          case 'reservation_cancelled':
+          case 'reservation_approved':
+          case 'reservation_updated':
+            // Update the stock item when reservation changes
+            if (data.stock) {
+              setStockData(prev => {
+                return prev.map(item =>
+                  item.id === data.stock.id ? { ...item, ...data.stock } : item
+                );
+              });
+            }
+            toast({
+              title: 'Reservation Updated',
+              description: 'Stock reservation has been updated',
+            });
+            break;
+        }
+      });
+
+      // Handle connection
+      socket.on('connect', () => {
+        console.log('WebSocket connected');
+      });
+
+      // Handle disconnection
+      socket.on('disconnect', () => {
+        console.log('WebSocket disconnected');
+      });
+
+      // Handle errors
+      socket.on('error', (error: any) => {
+        console.error('WebSocket error:', error);
+      });
+
+    } catch (error) {
+      console.error('Error setting up WebSocket:', error);
+    }
+  };
 
   // Fetch client codes when design is selected
   useEffect(() => {
@@ -1203,7 +1303,7 @@ export default function EnhancedStockManagement() {
         setSelectedProduct(null);
         setSelectedDesign('');
         setSelectedClientCode('');
-        fetchStockData();
+        // Real-time update will handle stock data refresh
       } else {
         console.error('Add Stock API Error:', result.error);
         setMessageDialog({
@@ -1261,7 +1361,7 @@ export default function EnhancedStockManagement() {
           type: 'success'
         });
         setEditingStock(null);
-        fetchStockData();
+        // Real-time update will handle stock data refresh
       } else {
         setMessageDialog({
           open: true,
@@ -1345,7 +1445,7 @@ export default function EnhancedStockManagement() {
           type: 'success'
         });
         setReservingStock(null);
-        fetchStockData();
+        // Real-time update will handle stock data refresh
       } else {
         setMessageDialog({
           open: true,
@@ -1380,14 +1480,14 @@ export default function EnhancedStockManagement() {
        const result = await response.json();
 
        if (result.success) {
-         setMessageDialog({
-           open: true,
-           title: 'Success',
-           message: 'Stock deleted successfully',
-           type: 'success'
-         });
-         fetchStockData();
-       } else {
+          setMessageDialog({
+            open: true,
+            title: 'Success',
+            message: 'Stock deleted successfully',
+            type: 'success'
+          });
+          // Real-time update will handle stock data refresh
+        } else {
          setMessageDialog({
            open: true,
            title: 'Error',
@@ -1632,7 +1732,7 @@ export default function EnhancedStockManagement() {
                         <TableHead>Color</TableHead>
                         <TableHead>Available</TableHead>
                         <TableHead title="Reserved (pending offers only)">Reserved</TableHead>
-                        <TableHead title="Total (approved + pending reservations)">Total</TableHead>
+                        <TableHead title="Total (available + pending reservations)">Total</TableHead>
                         <TableHead>Status</TableHead>
                         {/* <TableHead>Expiration</TableHead> */}
                         <TableHead>Actions</TableHead>
@@ -1812,7 +1912,7 @@ export default function EnhancedStockManagement() {
                                         <Label>Quantities</Label>
                                         <div className="mt-2 space-y-2">
                                           <div><strong>Total In:</strong> {stock.qty_in}</div>
-                                          <div title="Dynamic total = approved reservations + pending reservations"><strong>Total (approved + pending):</strong> {stock.total}</div>
+                                          <div title="Dynamic total = available + pending reservations (approved excluded, cancelled reverted to available)"><strong>Total (available + pending):</strong> {stock.total}</div>
                                           <div title="Reserved by pending offers only"><strong>Reserved:</strong> {stock.qty_offer}</div>
                                           <div><strong>Available:</strong> {stock.availableQuantity}</div>
                                           <div><strong>Actual Available for Sale:</strong> {getActualAvailableStock(stock)}</div>
@@ -2184,8 +2284,8 @@ export default function EnhancedStockManagement() {
                 {editingStock && (
                   <div className="text-sm text-muted-foreground mt-1 space-y-1">
                     <p>Current stock: {editingStock.qty_in} units</p>
-                    <p title="Dynamic total = approved reservations + pending reservations">
-                      Total (approved + pending): {editingStock.total} units
+                    <p title="Dynamic total = available + pending reservations (approved excluded, cancelled reverted to available)">
+                      Total (available + pending): {editingStock.total} units
                     </p>
                   </div>
                 )}

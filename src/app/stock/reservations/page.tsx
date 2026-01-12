@@ -341,7 +341,7 @@ export default function ReservationsPage() {
                       </TableCell>
                       <TableCell>{offer.stock.product?.CategoryName || offer.stock.categoryCode || 'N/A'}</TableCell>
                       <TableCell>{offer.stock.product?.SizeName || offer.stock.sizeCode || 'N/A'}</TableCell>
-                      <TableCell className="font-medium">{offer.clientCode}</TableCell>
+                      <TableCell className="font-medium">{offer.stock.product?.ClientCode || offer.stock.clientCode || 'N/A'}</TableCell>
                       <TableCell>{offer.quantity}</TableCell>
                       <TableCell>
                         {new Date(offer.createdAt).toLocaleDateString()}
@@ -378,7 +378,7 @@ export default function ReservationsPage() {
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
                                       <h4 className="font-medium mb-1">Client Code</h4>
-                                      <p>{selectedOffer.clientCode}</p>
+                                      <p>{selectedOffer.stock.product?.ClientCode || selectedOffer.stock.clientCode || 'N/A'}</p>
                                     </div>
                                     <div>
                                       <h4 className="font-medium mb-1">Status</h4>
@@ -414,7 +414,7 @@ export default function ReservationsPage() {
                                     <div className="border rounded p-3">
                                       <div className="grid grid-cols-2 gap-2 text-sm">
                                         <div><span className="font-medium">Design Name:</span> {selectedOffer.stock.product?.DesignName || selectedOffer.stock.designCode || 'N/A'}</div>
-                                        <div><span className="font-medium">Client Code:</span> {selectedOffer.clientCode}</div>
+                                        <div><span className="font-medium">Client Code:</span> {selectedOffer.stock.product?.ClientCode || selectedOffer.stock.clientCode || 'N/A'}</div>
                                         <div><span className="font-medium">Category:</span> {selectedOffer.stock.product?.CategoryName || selectedOffer.stock.categoryCode || 'N/A'}</div>
                                         <div><span className="font-medium">Size:</span> {selectedOffer.stock.product?.SizeName || selectedOffer.stock.sizeCode || 'N/A'}</div>
                                         {selectedOffer.stock.warehouse && (

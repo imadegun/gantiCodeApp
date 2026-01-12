@@ -1329,7 +1329,7 @@ export default function EnhancedStockManagement() {
      setEditingStock(stock);
      setEditFormData({
        productType: stock.productType,
-       qty_in: stock.qty_in,
+       qty_in: stock.total, // Use total (current total stock) instead of qty_in
        isComplated_set: stock.isComplated_set,
        isBody_only: stock.isBody_only,
        isLid_only: stock.isLid_only,
@@ -2281,14 +2281,23 @@ export default function EnhancedStockManagement() {
                   onChange={(e) => setEditFormData(prev => ({ ...prev, qty_in: parseInt(e.target.value) || 0 }))}
                   placeholder="Enter new quantity"
                 />
-                {editingStock && (
+                {/* {editingStock && (
                   <div className="text-sm text-muted-foreground mt-1 space-y-1">
                     <p>Current stock: {editingStock.qty_in} units</p>
-                    <p title="Dynamic total = available + pending reservations (approved excluded, cancelled reverted to available)">
-                      Total (available + pending): {editingStock.total} units
+                    <p>Reserved (pending offers): {editingStock.qty_offer} units</p>
+                    <p title="New Total = New Quantity (total stock received)">
+                      New Total: <span className="font-medium text-foreground">{editFormData.qty_in}</span> units
                     </p>
+                    <p title="New Available = New Total - Reserved">
+                      New Available: <span className="font-medium text-green-600">{editFormData.qty_in - editingStock.qty_offer}</span> units
+                    </p>
+                    {editFormData.qty_in !== editingStock.qty_in && (
+                      <p className="text-xs text-blue-600">
+                        Stock Change: {editFormData.qty_in > editingStock.qty_in ? '+' : ''}{editFormData.qty_in - editingStock.qty_in} units
+                      </p>
+                    )}
                   </div>
-                )}
+                )} */}
               </div>
 
               <div>
@@ -2391,12 +2400,12 @@ export default function EnhancedStockManagement() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
+            {/* <div>
               <Label>DesignCode</Label>
               <div className="mt-2 p-2 bg-muted rounded text-sm font-medium">
                 {reserveFormData.designCode}
               </div>
-            </div>
+            </div> */}
 
             <div>
               <Label htmlFor="reserve-quantity">Quantity to Reserve</Label>

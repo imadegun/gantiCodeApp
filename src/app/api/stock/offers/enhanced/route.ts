@@ -68,8 +68,16 @@ export async function GET(request: NextRequest) {
       offers.map(async (offer) => {
         try {
           const productResult = await query(
-            `SELECT DesignName, CategoryName, SizeName, ColorName, MaterialName, Photo1
-             FROM tblcollect_master WHERE ID = ?`,
+            `SELECT m.CollectCode, m.ClientCode, m.DesignCode, m.NameCode, m.CategoryCode, m.SizeCode,
+                    m.TextureCode, m.ColorCode, m.MaterialCode, m.Photo1,
+                    d.DesignName, c.CategoryName, s.SizeName, co.ColorName, ma.MaterialName
+             FROM tblcollect_master m
+             LEFT JOIN tblcollect_design d ON m.DesignCode = d.DesignCode
+             LEFT JOIN tblcollect_category c ON m.CategoryCode = c.CategoryCode
+             LEFT JOIN tblcollect_size s ON m.SizeCode = s.SizeCode
+             LEFT JOIN tblcollect_color co ON m.ColorCode = co.ColorCode
+             LEFT JOIN tblcollect_material ma ON m.MaterialCode = ma.MaterialCode
+             WHERE m.ID = ?`,
             [offer.stock.productId]
           );
           
@@ -90,11 +98,13 @@ export async function GET(request: NextRequest) {
               stock: {
                 ...offer.stock,
                 product: {
+                  CollectCode: product.CollectCode,
+                  ClientCode: product.ClientCode,
                   DesignName: product.DesignName || offer.stock.designCode,
                   CategoryName: product.CategoryName || offer.stock.categoryCode,
                   SizeName: product.SizeName || offer.stock.sizeCode,
-                  ColorName: product.ColorName,
-                  MaterialName: product.MaterialName,
+                  ColorName: product.ColorName || offer.stock.colorCode,
+                  MaterialName: product.MaterialName || offer.stock.materialCode,
                   Photo1: product.Photo1 || offer.stock.photo1
                 }
               }
